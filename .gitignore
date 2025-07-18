@@ -1,0 +1,58 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv/
+
+# Editor configs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python environment files
+*.env
+.env.*
+*.egg
+*.egg-info/
+dist/
+build/
+
+# FastAPI / Uvicorn logs
+*.log
+
+# Pydantic compiled schema cache
+*.json
+
+# Database files (if using SQLite)
+*.sqlite3
+*.db
+
+# Docker
+*.pid
+*.seed
+*.pid.lock
+docker-compose.override.yml
+
+# Testing
+htmlcov/
+.coverage
+.cache/
+.pytest_cache/
+nosetests.xml
+coverage.xml
+test-results/
+
+# Migrations (optional)
+migrations/
+
+# Static/media files (if
