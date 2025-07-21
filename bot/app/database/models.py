@@ -8,7 +8,11 @@ from .enums import EventTypeEnum
 from datetime import datetime
 from typing import List
 
+from dotenv import load_dotenv
+
 import os
+
+load_dotenv()
 
 engine = create_async_engine(url=os.getenv("db_url"), echo=True)
 
@@ -48,7 +52,7 @@ class Organizer(Base):
 class Event(Base):
     __tablename__ = "events"
     
-    id: Mapped[str] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(100))
     desc: Mapped[str] = mapped_column(String(512))
     type: Mapped[EventTypeEnum] = mapped_column(Enum(EventTypeEnum), name="event_type_enum",
@@ -70,9 +74,9 @@ class Event(Base):
 class Registration(Base):
     __tablename__ = "registrations"
     
-    id: Mapped[str] = mapped_column(primary_key=True, autoincrement=True)
-    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), primary_key=True, nullable=False)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"), primary_key=True, nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"),  nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP)
     
 async def async_main():
