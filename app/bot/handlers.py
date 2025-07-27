@@ -8,7 +8,9 @@ import asyncio
 import logging
 
 
-from ..database.requests import set_user, get_user, get_events, get_users_events_from_db
+from ..database.requests import (set_user, get_user, 
+                                 get_events, get_users_events_from_db,
+                                 set_registration)
 from . import keyboards as kb
 
 router = Router()
@@ -80,7 +82,7 @@ async def get_events_list(msg: Message):
         
         await msg.answer(
             text=event_txt,
-            reply_markup=kb.create_registration_button(event.id),
+            reply_markup=await kb.create_registration_button(event.id),
             parse_mode="HTML"
         )
         
@@ -100,7 +102,7 @@ async def get_users_events(msg: Message):
                     f"📝 {event.desc}\n"
                     f"🕐 {event.date_time.strftime('%d.%m.%Y at %H:%M')}\n"
                     f"📍 {event.location}\n"
-                    f"🏷 {event.type.value.title()}\n"
+                    f"🏷 {event.type.title()}\n"
                 )
 
                 await msg.answer(
@@ -129,3 +131,16 @@ async def get_users_profile(msg: Message):
     except Exception as e:
         logger.error(f"Error in the handler: {e}")
         await msg.answer("Something went wrong. Try again later")
+        
+@router.callback_query(F.data.startswith('register_'))
+async def register_user(cb: CallbackQuery):
+    status, msg = await set_registration(int(cb.data.split('_')[1]), cb.from_user.id)
+    if status:
+        await cb.answer(msg, show_alert=True)
+    else:
+        await cb.answer(msg, show_alert=True)
+        
+@router.callback_query(F.data == "already_registered")
+async def handle_already_registered(callback: CallbackQuery):
+    await callback.answer("You are already registered for this event!", show_alert=True)
+    

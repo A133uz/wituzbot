@@ -11,14 +11,7 @@ class Settings(BaseSettings):
     db_name: str
     redis_url: str
     
-    admin_secret: str
-    admin_site_name: str
-    admin_user_model: str
-    admin_user_model_username_field: str
-    ADMIN_SITE_SIGN_IN_LOGO: str
-    ADMIN_SITE_HEADER_LOGO: str
-    ADMIN_PRIMARY_COLOR: str
-    ADMIN_SESSION_EXPIRED_AT: int
+    
     
     
     @property

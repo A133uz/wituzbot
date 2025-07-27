@@ -1,5 +1,6 @@
 from .models import User, Registration, Event, Organizer
 from sqlalchemy import select, update, delete
+from sqlalchemy.exc import IntegrityError
 from typing import Dict
 from datetime import datetime
 import bcrypt, uuid
@@ -44,54 +45,24 @@ async def get_users_events_from_db(tg_id: int):
         print(f"db error: {e}")
         return 
     
-@staticmethod
-async def create_organizer(username: str, email: str, name: str, 
-                             password: str, is_superuser: bool = False) -> Organizer | None:
-        """Create new organizer"""
-        try:
-            async with get_session() as session:
-                hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-                organizer = Organizer(
-                    login=username,
-                    email=email,
-                    name=name,
-                    password_hash=hash_password,
-                    is_superuser=is_superuser,
-                    is_active=True
-                )
-                session.add(organizer)
-                await session.commit()
-                await session.refresh(organizer)
-                return organizer
-        except Exception as e:
-            print(f"Error creating organizer: {e}")
-            return None
-
-@staticmethod    
-async def authenticate(login: str, password: str) -> int | None:
-    async with get_session() as session:
-        query = select(Organizer).filter_by(login=login, is_superuser=True)
-        res = await session.scalars(query)
-        obj = res.first()
-        if not obj:
-            return None
-        if not bcrypt.checkpw(password.encode(), obj.password_hash.encode()):
-            return None
-        return obj.id
-    
-    
-@staticmethod
-async def change_pw(id: int, password: str) -> bool:
+async def set_registration(event_id: int, tg_id: int):
     try:
         async with get_session() as session:
-            pw_hash = bcrypt.checkpw(password.encode(), bcrypt.gensalt()).decode()
-            query = update(Organizer).where(Organizer.id.in_([id])).values(password_hash=pw_hash)
-            await session.execute(query)
-            await session.commit()
-            return True
+            registration = Registration(
+            user_id=tg_id,
+            event_id=event_id,
+            created_at=datetime.now()
+        )
+        
+        session.add(registration)
+        await session.commit()
+        return True, "Registration successful!"
+    except IntegrityError:
+        await session.rollback()
+        return False, "Registration failed due to database constraint.", None
     except Exception as e:
-        print(f"Error changing password: {e}")
-        return False
+        await session.rollback()
+        return False, f"An error occurred: {str(e)}", None
                 
         
 
