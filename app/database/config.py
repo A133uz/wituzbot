@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     db_name: str
     redis_url: str
     
-    
+    secret_key: str
     
     
     @property

@@ -1,6 +1,5 @@
-import asyncio, sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent.parent))
+import asyncio
+import uvicorn
 
 
 from aiogram import Bot, Dispatcher
@@ -16,13 +15,23 @@ load_dotenv()
 bot = Bot(token=settings.tg_token)
 dp = Dispatcher()
 
+async def start_server():
+    config = uvicorn.Config("app.admin.main:app", host="0.0.0.0", port=8000, reload=True)
+    server = uvicorn.Server(config)
+    await server.serve()
+    
+async def start_bot():
+    dp.include_router(router)
+    await dp.start_polling(bot)
+    
+
 async def main():
-        await async_main()
-        dp.include_router(router)
-        await dp.start_polling(bot)
+    await async_main()
+    await asyncio.gather(start_server(), start_bot())
+        
     
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("Bot has been stopped")
+        print("System has been stopped")

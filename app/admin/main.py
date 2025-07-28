@@ -208,15 +208,16 @@ async def event_detail(
 ):
     # Replace with actual database queries
     
-    res = await db.execute(select(Event).filter(Event.id == event_id, Event.organizer_id == organizer.id))
+    res = await db.execute(select(Event)
+                           .filter(Event.id == event_id, Event.organizer_id == organizer.id)
+                           .options(
+                               selectinload(Event.registrations).selectinload(Registration.user)
+                           ))
     
-    event = res.first()
+    event = res.scalar_one_or_none()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    regs = await db.execute(select(Registration).join(User).filter(Registration.event_id == event_id))
-    
-    registrations = regs.all()
     
     # Mock data - replace with real queries
     #event = {
@@ -255,7 +256,7 @@ async def event_detail(
         "request": request,
         "organizer": organizer,
         "event": event,
-        "registrations": registrations
+        "registrations": event.registrations
     })
 
 @app.get("/events/{event_id}/edit", response_class=HTMLResponse)
@@ -269,7 +270,7 @@ async def edit_event_form(
     
     res = await db.execute(select(Event).filter(Event.id == event_id, Event.organizer_id == organizer.id))
 
-    event = res.first()
+    event = res.scalar_one_or_none()
     
     
     if not event:
@@ -285,7 +286,7 @@ async def edit_event_form(
     #     "type": "conference"
     # }
     
-    return templates.TemplateResponse("edit_event.html", {
+    return templates.TemplateResponse("event_edit.html", {
         "request": request,
         "organizer": organizer,
         "event": event
@@ -311,7 +312,7 @@ async def edit_event(
         
         res = await db.execute(select(Event).filter(Event.id == event_id, Event.organizer_id == organizer.id))
     
-        event = res.first()
+        event = res.scalar_one_or_none()
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         
@@ -334,13 +335,14 @@ async def delete_event(
     db: AsyncSession = Depends(get_async_db),
     organizer = Depends(get_current_organizer)
 ):
+    
     # Delete event - replace with actual database operation
     res = await db.execute(select(Event).filter(Event.id == event_id, Event.organizer_id == organizer.id))
     
-    event = res.first()
+    event = res.scalar_one_or_none()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found") 
-    db.delete(event)
+    await db.delete(event)
     await db.commit()
     
     return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
