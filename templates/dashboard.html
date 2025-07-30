@@ -7,16 +7,44 @@
     <h1 class="h2">
         <i class="fas fa-tachometer-alt me-2"></i>
         Dashboard
+        {% if current_organizer.is_superuser %}
+        <span class="badge bg-warning text-dark ms-2">Superadmin</span>
+        {% endif %}
     </h1>
-    <a href="/events/create" class="btn btn-primary">
-        <i class="fas fa-plus me-2"></i>
-        Create New Event
-    </a>
+    <div class="d-flex gap-2">
+        {% if current_organizer.is_superuser %}
+        <a href="/organizers/create" class="btn btn-warning">
+            <i class="fas fa-user-plus me-2"></i>
+            Create Admin
+        </a>
+        {% endif %}
+        <a href="/events/create" class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i>
+            Create New Event
+        </a>
+        <form method="POST" action="/logout" class="d-inline">
+            <button type="submit" class="btn btn-outline-danger">
+                <i class="fas fa-sign-out-alt me-2"></i>
+                Logout
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Welcome Message -->
+<div class="alert alert-info mb-4">
+    <div class="d-flex align-items-center">
+        <i class="fas fa-user-circle me-3 fa-2x"></i>
+        <div>
+            <h6 class="mb-1">Welcome back, {{ current_organizer.name }}!</h6>
+            <small class="text-muted">{{ current_organizer.email }}</small>
+        </div>
+    </div>
 </div>
 
 <!-- Stats Cards -->
 <div class="row mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card bg-primary text-white">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
@@ -31,7 +59,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card bg-success text-white">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
@@ -46,7 +74,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card bg-info text-white">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
@@ -61,7 +89,113 @@
             </div>
         </div>
     </div>
+    {% if current_organizer.is_superuser %}
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Total Organizers</h6>
+                        <h2 class="mb-0">{{ total_organizers or 0 }}</h2>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-user-shield fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
+
+<!-- Admin Management Section (Only for Superadmins) -->
+{% if current_organizer.is_superuser %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-users-cog me-2"></i>
+            Organizer Management
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if organizers %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Login</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Events Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for organizer in organizer %}
+                    <tr>
+                        <td>
+                            <strong>{{ organizer.name }}</strong>
+                            {% if organizer.id == current_organizer.id %}
+                            <span class="badge bg-info ms-1">You</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ organizer.login }}</td>
+                        <td>{{ organizer.email }}</td>
+                        <td>
+                            {% if organizer.is_superuser %}
+                            <span class="badge bg-warning text-dark">Superadmin</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Organizer</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if organizer.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-danger">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-primary rounded-pill">{{ current_organizer.events|length }}</span>
+                        </td>
+                        <td>
+                            {% if organizer.id != current_organizer.id %}
+                            <div class="btn-group btn-group-sm">
+                                <a href="/organizers/{{ organizer.id }}/edit" class="btn btn-outline-secondary" title="Edit Organizer">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                {% if organizer.is_active %}
+                                <button type="button" class="btn btn-outline-warning" title="Deactivate" 
+                                        onclick="toggleAdminStatus('{{ organizer.id }}', false)">
+                                    <i class="fas fa-user-times"></i>
+                                </button>
+                                {% else %}
+                                <button type="button" class="btn btn-outline-success" title="Activate" 
+                                        onclick="toggleAdminStatus('{{ organizer.id }}', true)">
+                                    <i class="fas fa-user-check"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-3">
+            <i class="fas fa-users-cog fa-2x text-muted mb-2"></i>
+            <p class="text-muted">No other organizers found</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
 
 <!-- Events List -->
 <div class="card">
@@ -149,6 +283,21 @@ function deleteEvent(eventId) {
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = '/events/' + eventId + '/delete';
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+function toggleAdminStatus(orgId, activate) {
+    const action = activate ? 'activate' : 'deactivate';
+    const message = activate ? 
+        'Are you sure you want to activate this admin?' : 
+        'Are you sure you want to deactivate this admin?';
+        
+    if (confirm(message)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/organizers/' + orgId + '/' + action;
         document.body.appendChild(form);
         form.submit();
     }

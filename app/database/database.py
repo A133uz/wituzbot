@@ -1,13 +1,15 @@
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncSession, AsyncAttrs
 from .config import settings
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy import String
+from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
+from sqlalchemy import String, create_engine
 from typing import Annotated
 from contextlib import asynccontextmanager
 
-engine = create_async_engine(url=settings.DATABASE_URL_aiosqlite, echo=True)
+as_engine = create_async_engine(url=settings.DATABASE_URL_aiosqlite, echo=True)
+s_engine = create_engine(url=settings.DATABASE_URL_sqlite, echo=True)
 
-async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+async_session = async_sessionmaker(as_engine, class_=AsyncSession, expire_on_commit=False)
+sync_session = sessionmaker(s_engine, class_=Session, expire_on_commit=False)
 
 str_100 = Annotated[str, 100]
 str_25 = Annotated[str, 25]
@@ -28,7 +30,15 @@ class Base(AsyncAttrs, DeclarativeBase):
 async def get_async_db():
     async with async_session() as session:
         yield session
-            
+        
+def get_sync_db():
+    session = sync_session()
+    try:
+        yield session
+    finally:
+        session.close()
+        
+          
             
 @asynccontextmanager
 async def get_session():

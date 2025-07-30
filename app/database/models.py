@@ -9,7 +9,7 @@ from .enums import EventTypeEnum
 from datetime import datetime
 from typing import List
 
-from app.database.database import engine
+from app.database.database import as_engine
 from .database import Base, str_100, str_25
 
 
@@ -84,5 +84,5 @@ class Registration(Base):
     )
     
 async def async_main():
-    async with engine.begin() as conn:
+    async with as_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)   
