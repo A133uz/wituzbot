@@ -27,7 +27,7 @@ class OrganizerResponse(OrganizerCreate):
 class EventCreate(BaseModel):
     title: str
     desc: str
-    type: str  # EventTypeEnum
+    type: str | EventTypeEnum # EventTypeEnum
     date_time: datetime
     location: str
 

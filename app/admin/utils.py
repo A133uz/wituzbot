@@ -1,23 +1,45 @@
 from typing import Optional
-from datetime import timedelta
+import datetime, jwt
+from fastapi import Request
+from passlib.context import CryptContext
+from ..database.config import settings
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-
+# Password utilities
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash"""
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password: str) -> str:
-    """Hash a password"""
     return pwd_context.hash(password)
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """Create JWT token"""
+# JWT token utilities
+def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire =  datetime.datetime.now() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire, "iat": datetime.utcnow()})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+        expire = datetime.datetime.now() + datetime.timedelta(hours=settings.access_token_expire_hours)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encoded_jwt
+
+def verify_token(token: str) -> Optional[dict]:
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        return payload
+    except jwt.PyJWTError:
+        return None
+    
+def get_flash_messages(request: Request) -> list:
+    """Get flash messages from session"""
+    messages = request.session.get("flash_messages", [])
+    request.session["flash_messages"] = []  # Clear messages after getting them
+    return messages
+
+def flash_message(request: Request, message: str, category: str = "info"):
+    """Add flash message to session"""
+    if "flash_messages" not in request.session:
+        request.session["flash_messages"] = []
+    request.session["flash_messages"].append({"message": message, "category": category})

@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import BaseModel
+from pydantic import  EmailStr
 
 
 class Settings(BaseSettings):
@@ -12,6 +12,15 @@ class Settings(BaseSettings):
     redis_url: str
     
     secret_key: str
+    algorithm: str
+    access_token_expire_hours: int
+    
+    admin_name: str
+    admin_login: str
+    admin_email: EmailStr
+    admin_pass: str
+    admin_is_superuser: bool
+    admin_is_active: bool 
     
     
     @property
@@ -21,6 +30,10 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL_aiosqlite(self):
         return "sqlite+aiosqlite:///db.sqlite3"
+    
+    @property
+    def DATABASE_URL_sqlite(self):
+        return "sqlite:///db.sqlite3"
     
         
     model_config = SettingsConfigDict(env_file=".env")
