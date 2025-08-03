@@ -10,12 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload, Session
 
-from ..database.database import get_async_db, get_sync_db
+from ..database.database import get_async_db, get_sync_db, get_sync_session
 from ..database.config import settings
 from ..database.models import Organizer, Event, Registration
+from reminder_system  import _auto_schedule_reminder, update_event_and_reschedule, _cancel_reminder
 
 from datetime import datetime, timedelta
 from typing import Optional, Annotated
+import logging
 
 from .utils import *
 
@@ -228,7 +230,7 @@ async def create_event(
 ):
     try:
         # Combine date and time
-        event_datetime = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+        event_datetime = datetime.datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
         
         # Create new event - replace with actual database operation
         new_event = Event(
@@ -242,6 +244,27 @@ async def create_event(
         
         db.add(new_event)
         await db.commit()
+        
+        try:
+            with get_sync_session() as sync_db:
+                # Convert to sync operation for Celery scheduling
+
+
+                # Get the event in sync session
+                sync_event = sync_db.query(Event).filter(Event.id == new_event.id).first()
+
+                # Schedule reminder
+                task_id = _auto_schedule_reminder(sync_event, sync_db)
+
+                if task_id:
+                    logging.info(f"✅ Event created with automatic reminder: {new_event.id}")
+                else:
+                    logging.info(f"✅ Event created (no reminder - less than 24h): {new_event.id}")
+                
+            
+        except Exception as e:
+            logging.error(f"Failed to schedule reminder for event {new_event.id}: {e}")
+            # Don't fail the entire request if reminder scheduling fails
     
         return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     
@@ -369,12 +392,35 @@ async def edit_event(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         
+        datetime_changed = event.date_time != event_datetime
+        
         event.title = title
         event.desc = desc
         event.type = event_type
         event.date_time = event_datetime
         event.location = location
         await db.commit()
+        
+        if datetime_changed:
+            try:
+                with get_sync_session() as sync_db:
+                    
+                    
+                    # Get event in sync session
+                    sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
+
+                    # Reschedule reminder
+                    new_task_id = update_event_and_reschedule(sync_event, sync_db)
+
+                    if new_task_id:
+                        logging.info(f"✅ Event {event_id} updated and reminder rescheduled")
+                    else:
+                        logging.info(f"✅ Event {event_id} updated (no reminder - less than 24h)")
+
+                
+            except Exception as e:
+                logging.error(f"Failed to reschedule reminder for event {event_id}: {e}")
+        
         
         return RedirectResponse(url=f"/events/{event_id}", status_code=status.HTTP_302_FOUND)
     
@@ -394,7 +440,25 @@ async def delete_event(
     
     event = res.scalar_one_or_none()
     if not event:
-        raise HTTPException(status_code=404, detail="Event not found") 
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    try:
+        if event.celery_task_id:  # Only if there's a scheduled reminder
+            with get_sync_session() as sync_db:
+                
+                
+                # Get event in sync session
+                sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
+
+                # Cancel reminder task
+                _cancel_reminder(sync_event, sync_db)
+                logging.info(f"🗑️ Cancelled reminder for event {event_id} before deletion")
+
+                
+            
+    except Exception as e:
+        logging.error(f"Failed to cancel reminder for event {event_id}: {e}") 
+        
     await db.delete(event)
     await db.commit()
     
