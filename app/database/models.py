@@ -9,8 +9,7 @@ from .enums import EventTypeEnum
 from datetime import datetime
 from typing import List
 
-from app.database.database import as_engine
-from .database import Base, str_100, str_25
+from .database import Base, str_100, str_25, as_engine
 
 
 
@@ -56,6 +55,9 @@ class Event(Base):
     type: Mapped[EventTypeEnum] = mapped_column(String(25), nullable=False)
     date_time: Mapped[datetime] = mapped_column(DateTime(), nullable=False)
     location: Mapped[str_100]
+    
+    celery_task_id = mapped_column(String(255))
+    reminder_sent: Mapped[Boolean] = mapped_column(Boolean, default=False)
     
     organizer_id: Mapped[int] = mapped_column(ForeignKey("organizers.id"))
     

@@ -3,7 +3,7 @@ from .config import settings
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 from sqlalchemy import String, create_engine
 from typing import Annotated
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 
 as_engine = create_async_engine(url=settings.DATABASE_URL_aiosqlite, echo=True)
 s_engine = create_engine(url=settings.DATABASE_URL_sqlite, echo=True)
@@ -31,6 +31,7 @@ async def get_async_db():
     async with async_session() as session:
         yield session
         
+                
 def get_sync_db():
     session = sync_session()
     try:
@@ -38,7 +39,13 @@ def get_sync_db():
     finally:
         session.close()
         
-          
+@contextmanager
+def get_sync_session():
+    session = sync_session()
+    try:
+        yield session
+    finally:
+        session.close()         
             
 @asynccontextmanager
 async def get_session():
