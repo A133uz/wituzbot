@@ -63,6 +63,19 @@ async def set_registration(event_id: int, tg_id: int):
     except Exception as e:
         await session.rollback()
         return False, f"An error occurred: {str(e)}", None
-                
+    
+async def check_user_registration(tg_id: int, event_id: int) -> bool:
+    try:
+        async with get_session() as session:
+            reg = await session.execute(select(Registration).filter(
+                Registration.user_id == tg_id, 
+                Registration.event_id == event_id
+            ))
+        return True if reg else False
+    except Exception as e:
+        await session.rollback()
+        return False
+        
+        
         
 

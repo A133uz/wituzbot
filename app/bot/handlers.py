@@ -66,7 +66,7 @@ async def process_input(msg: Message, state: FSMContext):
         
 @router.message(F.text == "Events")
 async def get_events_list(msg: Message):
-    
+    user_id = msg.from_user.id
     all_events = await get_events()
     
     if not all_events:
@@ -82,7 +82,7 @@ async def get_events_list(msg: Message):
         
         await msg.answer(
             text=event_txt,
-            reply_markup=await kb.create_registration_button(event.id),
+            reply_markup=await kb.create_registration_button(event.id, user_id),
             parse_mode="HTML"
         )
         
