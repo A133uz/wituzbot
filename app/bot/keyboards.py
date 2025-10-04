@@ -15,7 +15,7 @@ async def create_registration_button(event_id: int, user_id: int) -> InlineKeybo
         return await create_registered_button()
     kb = InlineKeyboardBuilder()
     kb.button(text="📝 Register", callback_data=f"register_{event_id}")
-    
+
     return kb.as_markup()
 
 async def create_registered_button():

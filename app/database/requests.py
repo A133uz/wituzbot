@@ -3,7 +3,6 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.exc import IntegrityError
 from typing import Dict
 from datetime import datetime
-import bcrypt, uuid
 
 from .database import get_session
 
@@ -59,21 +58,21 @@ async def set_registration(event_id: int, tg_id: int):
         return True, "Registration successful!"
     except IntegrityError:
         await session.rollback()
-        return False, "Registration failed due to database constraint.", None
+        return False, "Registration failed due to database constraint."
     except Exception as e:
         await session.rollback()
-        return False, f"An error occurred: {str(e)}", None
+        return False, f"An error occurred: {str(e)}"
     
 async def check_user_registration(tg_id: int, event_id: int) -> bool:
     try:
         async with get_session() as session:
-            reg = await session.execute(select(Registration).filter(
+            res = await session.execute(select(Registration).filter(
                 Registration.user_id == tg_id, 
                 Registration.event_id == event_id
             ))
-        return True if reg else False
+            reg = res.scalar_one_or_none()
+        return reg is not None
     except Exception as e:
-        await session.rollback()
         return False
         
         

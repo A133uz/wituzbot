@@ -65,13 +65,13 @@
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="date" class="form-label">Date</label>
-                                <input type="date" class="form-control" id="date" name="date" value="{{ event.date_time.strftime('%Y-%m-%d') }}" required>
+                                <input type="date" class="form-control" id="date" name="date" value="{{ event.local_datetime.strftime('%Y-%m-%d') }}" required>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="time" class="form-label">Time</label>
-                                <input type="time" class="form-control" id="time" name="time" value="{{ event.date_time.strftime('%H:%M') }}" required>
+                                <input type="time" class="form-control" id="time" name="time" value="{{ event.local_datetime.strftime('%H:%M') }}" required>
                             </div>
                         </div>
                     </div>

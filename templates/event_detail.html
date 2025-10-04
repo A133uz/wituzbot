@@ -29,8 +29,8 @@
                 
                 <div class="row">
                     <div class="col-md-6">
-                        <p><strong><i class="fas fa-calendar me-2"></i>Date:</strong> {{ event.date_time.strftime('%B %d, %Y') }}</p>
-                        <p><strong><i class="fas fa-clock me-2"></i>Time:</strong> {{ event.date_time.strftime('%H:%M') }}</p>
+                        <p><strong><i class="fas fa-calendar me-2"></i>Date:</strong> {{ event.local_datetime.strftime('%B %d, %Y') }}</p>
+                        <p><strong><i class="fas fa-clock me-2"></i>Time:</strong> {{ event.local_datetime.strftime('%H:%M') }}</p>
                     </div>
                     <div class="col-md-6">
                         <p><strong><i class="fas fa-map-marker-alt me-2"></i>Location:</strong> {{ event.location }}</p>

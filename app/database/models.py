@@ -53,10 +53,10 @@ class Event(Base):
     title: Mapped[str_100]
     desc: Mapped[str] = mapped_column(Text())
     type: Mapped[EventTypeEnum] = mapped_column(String(25), nullable=False)
-    date_time: Mapped[datetime] = mapped_column(DateTime(), nullable=False)
+    date_time: Mapped[datetime] = mapped_column(DateTime())
     location: Mapped[str_100]
     
-    celery_task_id = mapped_column(String(255))
+    celery_task_id = mapped_column(String(255), nullable=True)
     reminder_sent: Mapped[Boolean] = mapped_column(Boolean, default=False)
     
     organizer_id: Mapped[int] = mapped_column(ForeignKey("organizers.id"))
@@ -64,6 +64,19 @@ class Event(Base):
     #Relationships
     organizer: Mapped["Organizer"] = relationship(back_populates="events")
     registrations: Mapped[List["Registration"]] = relationship(back_populates="event", cascade="all, delete-orphan")
+    
+    @property
+    def local_datetime(self):
+        """Parse datetime of the event to local timezone"""
+        import pytz
+        from datetime import timezone as tz
+        
+        dt = self.date_time
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz.utc)
+            
+        local_tz = pytz.timezone('Asia/Tashkent')
+        return dt.astimezone(local_tz)
     
    
     

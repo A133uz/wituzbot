@@ -76,7 +76,7 @@ async def get_events_list(msg: Message):
     for event in all_events:
         event_txt = (
             f"📅 <b>{event.title}</b>\n"
-            f"🕐 {event.date_time.strftime('%d.%m.%Y at %H:%M')}\n"
+            f"🕐 {event.local_datetime.strftime('%d.%m.%Y at %H:%M')}\n"
             f"📍 {event.location}"
         )
         
@@ -100,7 +100,7 @@ async def get_users_events(msg: Message):
                 event_text = (
                     f"📅 <b>{event.title}</b>\n"
                     f"📝 {event.desc}\n"
-                    f"🕐 {event.date_time.strftime('%d.%m.%Y at %H:%M')}\n"
+                    f"🕐 {event.local_datetime.strftime('%d.%m.%Y at %H:%M')}\n"
                     f"📍 {event.location}\n"
                     f"🏷 {event.type.title()}\n"
                 )

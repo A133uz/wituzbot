@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+import pytz
 from starlette.middleware.sessions import SessionMiddleware
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,13 +16,15 @@ from ..database.config import settings
 from ..database.models import Organizer, Event, Registration
 from reminder_system  import _auto_schedule_reminder, update_event_and_reschedule, _cancel_reminder
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Annotated
 import logging
 
 from .utils import *
 
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Event Admin Panel")
 
@@ -229,21 +232,34 @@ async def create_event(
     organizer = Depends(get_current_organizer)
 ):
     try:
-        # Combine date and time
         event_datetime = datetime.datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
-        
-        # Create new event - replace with actual database operation
+        logger.info(f"📝 Parsed input: {event_datetime}")
+
+        tashkent_tz = pytz.timezone('Asia/Tashkent')
+        event_datetime_tashkent = tashkent_tz.localize(event_datetime)
+        logger.info(f"🌍 Tashkent time: {event_datetime_tashkent}")
+
+        event_datetime_utc = event_datetime_tashkent.astimezone(timezone.utc)
+        logger.info(f"🌐 UTC time: {event_datetime_utc}")
+
+        utc_naive = event_datetime_utc.replace(tzinfo=None)
+        logger.info(f"💾 Storing as naive UTC: {utc_naive}")
+
+        # Create new event
         new_event = Event(
             title=title,
             desc=desc,
             type=event_type,
-            date_time=event_datetime,
+            date_time=utc_naive,
             location=location,
             organizer_id=organizer.id
         )
-        
+
         db.add(new_event)
         await db.commit()
+        await db.refresh(new_event)
+
+        logger.info(f"✅ Event saved with date_time: {new_event.date_time}")
         
         try:
             with get_sync_session() as sync_db:
@@ -257,13 +273,13 @@ async def create_event(
                 task_id = _auto_schedule_reminder(sync_event, sync_db)
 
                 if task_id:
-                    logging.info(f"✅ Event created with automatic reminder: {new_event.id}")
+                    logger.info(f"✅ Event created with automatic reminder: {new_event.id}")
                 else:
-                    logging.info(f"✅ Event created (no reminder - less than 24h): {new_event.id}")
+                    logger.info(f"✅ Event created (no reminder - less than 24h): {new_event.id}")
                 
             
         except Exception as e:
-            logging.error(f"Failed to schedule reminder for event {new_event.id}: {e}")
+            logger.error(f"Failed to schedule reminder for event {new_event.id}: {e}")
             # Don't fail the entire request if reminder scheduling fails
     
         return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
@@ -382,44 +398,48 @@ async def edit_event(
     organizer = Depends(get_current_organizer)
 ):
     try:
-        event_datetime = datetime.datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+        # Parse input
+        event_datetime_naive = datetime.datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
         
-        # Update event - replace with actual database operation
+        # Convert Tashkent → UTC (same as create endpoint)
+        tashkent_tz = pytz.timezone('Asia/Tashkent')
+        event_datetime_tashkent = tashkent_tz.localize(event_datetime_naive)
+        event_datetime_utc = event_datetime_tashkent.astimezone(timezone.utc)
+        utc_naive = event_datetime_utc.replace(tzinfo=None)
         
+        logger.info(f"Editing event {event_id}: {event_datetime_tashkent} → {utc_naive} UTC")
+        
+        # Get event
         res = await db.execute(select(Event).filter(Event.id == event_id, Event.organizer_id == organizer.id))
-    
         event = res.scalar_one_or_none()
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         
-        datetime_changed = event.date_time != event_datetime
+        # Check if datetime changed
+        datetime_changed = event.date_time != utc_naive
         
+        # Update event
         event.title = title
         event.desc = desc
         event.type = event_type
-        event.date_time = event_datetime
+        event.date_time = utc_naive  # Store as UTC naive
         event.location = location
         await db.commit()
         
         if datetime_changed:
             try:
                 with get_sync_session() as sync_db:
-                    
-                    
-                    # Get event in sync session
                     sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
-
-                    # Reschedule reminder
                     new_task_id = update_event_and_reschedule(sync_event, sync_db)
-
+                    
                     if new_task_id:
-                        logging.info(f"✅ Event {event_id} updated and reminder rescheduled")
+                        logger.info(f"✅ Event {event_id} updated and reminder rescheduled")
                     else:
-                        logging.info(f"✅ Event {event_id} updated (no reminder - less than 24h)")
+                        logger.info(f"✅ Event {event_id} updated (no reminder - less than 24h)")
 
                 
             except Exception as e:
-                logging.error(f"Failed to reschedule reminder for event {event_id}: {e}")
+                logger.error(f"Failed to reschedule reminder for event {event_id}: {e}")
         
         
         return RedirectResponse(url=f"/events/{event_id}", status_code=status.HTTP_302_FOUND)
@@ -452,12 +472,12 @@ async def delete_event(
 
                 # Cancel reminder task
                 _cancel_reminder(sync_event, sync_db)
-                logging.info(f"🗑️ Cancelled reminder for event {event_id} before deletion")
+                logger.info(f"🗑️ Cancelled reminder for event {event_id} before deletion")
 
                 
             
     except Exception as e:
-        logging.error(f"Failed to cancel reminder for event {event_id}: {e}") 
+        logger.error(f"Failed to cancel reminder for event {event_id}: {e}") 
         
     await db.delete(event)
     await db.commit()
