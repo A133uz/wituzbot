@@ -1,8 +1,9 @@
-from fastapi import FastAPI, Request, Depends, HTTPException, Form, status, Response
+from fastapi import FastAPI, Request, Depends, HTTPException, status, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.exceptions import RequestValidationError
 
 import pytz
 from starlette.middleware.sessions import SessionMiddleware
@@ -14,10 +15,12 @@ from sqlalchemy.orm import selectinload, Session
 from ..database.database import get_async_db, get_sync_db, get_sync_session
 from ..database.config import settings
 from ..database.models import Organizer, Event, Registration
+from ..database.schemas import EventCreate, EventUpdate, OrganizerCreate, OrganizerUpdate, LoginRequest
+
 from reminder_system  import _auto_schedule_reminder, update_event_and_reschedule, _cancel_reminder
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Annotated
+from typing import Optional
 import logging
 
 from .utils import *
@@ -83,7 +86,21 @@ async def require_superuser(current_organizer: Organizer = Depends(require_auth)
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Superuser privileges required"
         )
-    return current_organizer 
+    return current_organizer
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors gracefully"""
+    error_messages = []
+    for error in exc.errors():
+        field = error['loc'][-1] if error['loc'] else 'unknown'
+        error_messages.append(f"{field}: {error['msg']}")
+    
+    flash_message(request, f"Validation failed: {'; '.join(error_messages)}", "error")
+    
+    # Redirect back to the form
+    referer = request.headers.get('referer', '/')
+    return RedirectResponse(url=referer, status_code=302) 
     
 
 @app.get("/", response_class=HTMLResponse)
@@ -97,17 +114,15 @@ async def login_page(request: Request):
 async def login(
     request: Request,
     response: Response,
-    login: Annotated[str, Form()],
-    password: Annotated[str, Form()],
-    remember: Annotated[bool, Form()] = False,
+    credentials: LoginRequest = Depends(),
     db: Session = Depends(get_sync_db)
 ):
-    if not login or not password:
+    if not credentials:
         flash_message(request, "Please fill in all fields.", "error")
         return RedirectResponse(url="/login", status_code=302)
     
     # Find organizer by login
-    organizer = db.query(Organizer).filter(Organizer.login == login).first()
+    organizer = db.query(Organizer).filter(Organizer.login == credentials.login).first()
     
     if not organizer:
         flash_message(request, "Invalid username or password.", "error")
@@ -117,12 +132,12 @@ async def login(
         flash_message(request, "Your account has been deactivated. Please contact an administrator.", "error")
         return RedirectResponse(url="/login", status_code=302)
     
-    if not verify_password(password, organizer.password_hash):
+    if not verify_password(credentials.password, organizer.password_hash):
         flash_message(request, "Invalid username or password.", "error")
         return RedirectResponse(url="/login", status_code=302)
     
     # Create access token
-    access_token_expires = timedelta(hours=settings.access_token_expire_hours if remember else 1)
+    access_token_expires = timedelta(hours=settings.access_token_expire_hours if credentials.remember else 1)
     access_token = create_access_token(
         data={"sub": str(organizer.id)}, expires_delta=access_token_expires
     )
@@ -135,7 +150,7 @@ async def login(
         httponly=True,
         secure=False,  # Set to True in production with HTTPS
         samesite="lax",
-        max_age=int(access_token_expires.total_seconds()) if remember else None
+        max_age=int(access_token_expires.total_seconds()) if credentials.remember else None
     )
     
     flash_message(request, f"Welcome back, {organizer.name}!", "success")
@@ -195,7 +210,8 @@ async def dashboard(
             "total_registrations": total_registrations,
             "total_organizers": total_organizers,
             "recent_registrations": recent_registrations,
-            "now": now
+            "now": now,
+            "form_data" : {}
         })
     
     return templates.TemplateResponse("dashboard.html", {
@@ -206,7 +222,8 @@ async def dashboard(
         "upcoming_events_count": upcoming_events_count,
         "total_registrations": total_registrations,
         "recent_registrations": recent_registrations,
-        "now": now
+        "now": now,
+        "form_data" : {}
     })
 
 @app.get("/events/create", response_class=HTMLResponse)
@@ -222,17 +239,12 @@ async def create_event_form(
 @app.post("/events/create")
 async def create_event(
     request: Request,
-    title: str = Form(...),
-    desc: str = Form(...),
-    event_type: str = Form(...),
-    date: str = Form(...),
-    time: str = Form(...),
-    location: str = Form(...),
+    event_data: EventCreate = Depends(),
     db: AsyncSession = Depends(get_async_db),
     organizer = Depends(get_current_organizer)
 ):
     try:
-        event_datetime = datetime.datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+        event_datetime = datetime.datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")
         logger.info(f"📝 Parsed input: {event_datetime}")
 
         tashkent_tz = pytz.timezone('Asia/Tashkent')
@@ -247,11 +259,11 @@ async def create_event(
 
         # Create new event
         new_event = Event(
-            title=title,
-            desc=desc,
-            type=event_type,
+            title=event_data.title,
+            desc=event_data.desc,
+            type=event_data.type,
             date_time=utc_naive,
-            location=location,
+            location=event_data.location,
             organizer_id=organizer.id
         )
 
@@ -285,10 +297,13 @@ async def create_event(
         return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     
     except ValueError:
+        form = await request.form()
+        form_dict = dict(form)
         return templates.TemplateResponse("create_event.html", {
             "request": request,
             "organizer": organizer,
-            "error": "Invalid date/time format"
+            "error": "Invalid date/time format",
+            "form_data" : form_dict
         })
 
 @app.get("/events/{event_id}", response_class=HTMLResponse)
@@ -348,7 +363,8 @@ async def event_detail(
         "request": request,
         "organizer": organizer,
         "event": event,
-        "registrations": event.registrations
+        "registrations": event.registrations,
+        "form_data" : {}
     })
 
 @app.get("/events/{event_id}/edit", response_class=HTMLResponse)
@@ -381,25 +397,21 @@ async def edit_event_form(
     return templates.TemplateResponse("event_edit.html", {
         "request": request,
         "organizer": organizer,
-        "event": event
+        "event": event,
+        "form_data": {}
     })
 
 @app.post("/events/{event_id}/edit")
 async def edit_event(
     request: Request,
     event_id: int,
-    title: str = Form(...),
-    desc: str = Form(...),
-    event_type: str = Form(...),
-    date: str = Form(...),
-    time: str = Form(...),
-    location: str = Form(...),
+    event_data: EventUpdate = Depends(),
     db: AsyncSession = Depends(get_async_db),
     organizer = Depends(get_current_organizer)
 ):
     try:
         # Parse input
-        event_datetime_naive = datetime.datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+        event_datetime_naive = datetime.datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")
         
         # Convert Tashkent → UTC (same as create endpoint)
         tashkent_tz = pytz.timezone('Asia/Tashkent')
@@ -419,11 +431,11 @@ async def edit_event(
         datetime_changed = event.date_time != utc_naive
         
         # Update event
-        event.title = title
-        event.desc = desc
-        event.type = event_type
+        event.title = event_data.title
+        event.desc = event_data.desc
+        event.type = event_data.type 
         event.date_time = utc_naive  # Store as UTC naive
-        event.location = location
+        event.location = event_data.location
         await db.commit()
         
         if datetime_changed:
@@ -489,67 +501,51 @@ async def delete_event(
 async def create_organizer_form(request: Request, organizer = Depends(require_superuser)):
     return templates.TemplateResponse("create_admin.html", {
         "request": request,
-        "organizer": organizer
+        "organizer": organizer,
+        "form_data": {}
     })
 
 @app.post("/organizers/create")
 async def create_organizer(
     request: Request,
-    name: Annotated[str, Form()],
-    login: Annotated[str, Form()],
-    email: Annotated[str, Form()],
-    password: Annotated[str, Form()],
-    confirmPassword: Annotated[str, Form()],
-    is_superuser: Annotated[bool, Form()] = False,
+    organizer_data: OrganizerCreate = Depends(),
     current_organizer: Organizer = Depends(require_superuser),
     db: AsyncSession = Depends(get_async_db)
 ):
-    # Validation
-    if not all([name, login, email, password, confirmPassword]):
-        flash_message(request, "Please fill in all required fields.", "error")
+    res_org = await db.execute(
+        select(Organizer).filter(Organizer.login == organizer_data.login)
+    )
+    if res_org.first():
+        flash_message(request, "Username already exists.", "error")
         return RedirectResponse(url="/organizers/create", status_code=302)
     
-    if password != confirmPassword:
-        flash_message(request, "Passwords do not match.", "error")
+    # Check if email exists
+    res_email = await db.execute(
+        select(Organizer).filter(Organizer.email == organizer_data.email)
+    )
+    if res_email.first():
+        flash_message(request, "Email already exists.", "error")
         return RedirectResponse(url="/organizers/create", status_code=302)
     
-    if len(password) < 8:
-        flash_message(request, "Password must be at least 8 characters long.", "error")
-        return RedirectResponse(url="/organizers/create", status_code=302)
-    
-    # Check if login already exists
-    res_org = await db.execute(select(Organizer).filter(Organizer.login == login))
-    existing_organizer = res_org.first()
-    if existing_organizer:
-        flash_message(request, "Username already exists. Please choose a different one.", "error")
-        return RedirectResponse(url="/organizers/create", status_code=302)
-    
-    # Check if email already exists
-    res_email = await db.execute(select(Organizer).filter(Organizer.email == email))
-    existing_email = res_email.first()
-    if existing_email:
-        flash_message(request, "Email already exists. Please use a different email.", "error")
-        return RedirectResponse(url="/organizers/create", status_code=302)
-    
-    # Create new admin
-    password_hash = get_password_hash(password)
-    new_admin = Organizer(
-        name=name,
-        login=login,
-        email=email,
-        password_hash=password_hash,
-        is_superuser=is_superuser,
+    # Create organizer
+    new_organizer = Organizer(
+        name=organizer_data.name,
+        login=organizer_data.login,
+        email=organizer_data.email,
+        password_hash=get_password_hash(organizer_data.password),
+        is_superuser=organizer_data.is_superuser,
         is_active=True
     )
     
     try:
-        db.add(new_admin)
+        db.add(new_organizer)
         await db.commit()
-        flash_message(request, f'Admin "{name}" created successfully!', "success")
+        flash_message(request, f"Admin '{organizer_data.name}' created successfully!", "success")
         return RedirectResponse(url="/dashboard", status_code=302)
     except Exception as e:
-        db.rollback()
-        flash_message(request, "An error occurred while creating the admin. Please try again.", "error")
+        await db.rollback()
+        logger.error(f"Error creating organizer: {e}")
+        flash_message(request, "Failed to create admin.", "error")
         return RedirectResponse(url="/organizers/create", status_code=302)
 
 @app.get("/organizers/{admin_id}/edit", response_class=HTMLResponse)
@@ -568,85 +564,64 @@ async def edit_admin_page(
     return templates.TemplateResponse("edit_admin.html", {
         "request": request,
         "organizer": organizer,
-        "messages": messages
+        "messages": messages, 
+        "form_data": {}
     })
 
 @app.post("/organizers/{admin_id}/edit")
 async def edit_admin(
     organizer_id: int,
     request: Request,
-    name: Annotated[str, Form()],
-    login: Annotated[str, Form()],
-    email: Annotated[str, Form()],
-    changePassword: Annotated[bool, Form()] = False,
-    password: Annotated[str, Form()] = "",
-    confirmPassword: Annotated[str, Form()] = "",
-    is_active: Annotated[bool, Form()] = False,
-    is_superuser: Annotated[bool, Form()] = False,
+    organizer_data: OrganizerUpdate = Depends(),
     current_organizer: Organizer = Depends(require_superuser),
     db: AsyncSession = Depends(get_async_db)
 ):
     res = await db.execute(select(Organizer).filter(Organizer.id == organizer_id))
-    organizer = res.first()
+    organizer = res.scalar_one_or_none()
+    
     if not organizer:
         raise HTTPException(status_code=404, detail="Admin not found")
     
-    # Validation
-    if not all([name, login, email]):
-        flash_message(request, "Please fill in all required fields.", "error")
+    # Check if login exists (excluding current)
+    res_exists = await db.execute(
+        select(Organizer).filter(
+            Organizer.login == organizer_data.login,
+            Organizer.id != organizer_id
+        )
+    )
+    if res_exists.first():
+        flash_message(request, "Username already exists.", "error")
         return RedirectResponse(url=f"/organizers/{organizer_id}/edit", status_code=302)
     
-    # Check if login already exists (excluding current admin)
-    res_exists = await db.execute(select(Organizer).filter(
-        Organizer.login == login,
-        Organizer.id != organizer_id
-    ))
-    existing_organizer = res_exists.first()
-    if existing_organizer:
-        flash_message(request, "Username already exists. Please choose a different one.", "error")
+    # Check if email exists (excluding current)
+    exist_email_query = await db.execute(
+        select(Organizer).filter(
+            Organizer.email == organizer_data.email,
+            Organizer.id != organizer_id
+        )
+    )
+    if exist_email_query.first():
+        flash_message(request, "Email already exists.", "error")
         return RedirectResponse(url=f"/organizers/{organizer_id}/edit", status_code=302)
     
-    # Check if email already exists (excluding current admin)
-    exist_email_query = await db.execute(select(Organizer).filter(
-        Organizer.email == email,
-        Organizer.id != organizer_id
-    ))
-    existing_email = exist_email_query.first()
-    if existing_email:
-        flash_message(request, "Email already exists. Please use a different email.", "error")
-        return RedirectResponse(url=f"/organizers/{organizer_id}/edit", status_code=302)
+    # Update organizer
+    organizer.name = organizer_data.name
+    organizer.login = organizer_data.login
+    organizer.email = organizer_data.email
+    organizer.is_active = organizer_data.is_active
+    organizer.is_superuser = organizer_data.is_superuser
     
-    # Password validation if changing password
-    if changePassword:
-        if not password or not confirmPassword:
-            flash_message(request, "Please provide both password fields.", "error")
-            return RedirectResponse(url=f"/organizers/{organizer_id}/edit", status_code=302)
-        
-        if password != confirmPassword:
-            flash_message(request, "Passwords do not match.", "error")
-            return RedirectResponse(url=f"/organizers/{organizer_id}/edit", status_code=302)
-        
-        if len(password) < 8:
-            flash_message(request, "Password must be at least 8 characters long.", "error")
-            return RedirectResponse(url=f"/organizers/{organizer_id}/edit", status_code=302)
-    
-    # Update admin
-    organizer.name = name
-    organizer.login = login
-    organizer.email = email
-    organizer.is_active = is_active
-    organizer.is_superuser = is_superuser
-    
-    if changePassword:
-        organizer.password_hash = get_password_hash(password)
+    if organizer_data.changePassword:
+        organizer.password_hash = get_password_hash(organizer_data.password)
     
     try:
         await db.commit()
-        flash_message(request, f'Admin "{name}" updated successfully!', "success")
+        flash_message(request, f"Admin '{organizer_data.name}' updated successfully!", "success")
         return RedirectResponse(url="/dashboard", status_code=302)
     except Exception as e:
-        db.rollback()
-        flash_message(request, "An error occurred while updating the admin. Please try again.", "error")
+        await db.rollback()
+        logger.error(f"Error updating organizer: {e}")
+        flash_message(request, "Failed to update admin.", "error")
         return RedirectResponse(url=f"/organizers/{organizer_id}/edit", status_code=302)
 
 @app.post("/organizers/{organizer_id}/activate")

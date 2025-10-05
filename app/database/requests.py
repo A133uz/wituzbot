@@ -5,10 +5,13 @@ from typing import Dict
 from datetime import datetime
 
 from .database import get_session
+from .schemas import UserCreate, RegistrationCreate
 
 async def set_user(reg_data: Dict):
     async with get_session() as session:
-        user = User(**reg_data)
+        user_schema = UserCreate(**reg_data)
+        
+        user = User(**user_schema.model_dump())
         session.add(user)
         await session.commit()
         
@@ -47,18 +50,22 @@ async def get_users_events_from_db(tg_id: int):
 async def set_registration(event_id: int, tg_id: int):
     try:
         async with get_session() as session:
-            registration = Registration(
-            user_id=tg_id,
-            event_id=event_id,
-            created_at=datetime.now()
-        )
+            reg_schema = RegistrationCreate(
+                user_id=tg_id,
+                event_id=event_id,
+                created_at=datetime.now()
+            )
         
+        registration = Registration(**reg_schema.model_dump())
         session.add(registration)
         await session.commit()
         return True, "Registration successful!"
     except IntegrityError:
         await session.rollback()
         return False, "Registration failed due to database constraint."
+    except ValueError as e:
+        await session.rollback()
+        return False, f"❌ Validation error: {str(e)}"
     except Exception as e:
         await session.rollback()
         return False, f"An error occurred: {str(e)}"
