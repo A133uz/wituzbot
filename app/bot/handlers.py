@@ -77,6 +77,7 @@ async def get_events_list(msg: Message):
         event_txt = (
             f"📅 <b>{event.title}</b>\n"
             f"🕐 {event.local_datetime.strftime('%d.%m.%Y at %H:%M')}\n"
+            f"{event.type.capitalize()}\n"
             f"📍 {event.location}"
         )
         
