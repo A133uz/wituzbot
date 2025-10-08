@@ -82,6 +82,27 @@ async def check_user_registration(tg_id: int, event_id: int) -> bool:
     except Exception as e:
         return False
         
-        
+async def remove_registration(tg_id: int, event_id: int):
+    try:
+        async with get_session() as session:
+            res = await session.execute(select(Registration).filter(
+                Registration.user_id == tg_id,
+                Registration.event_id == event_id
+            ))
+            reg = res.scalar_one_or_none()
+            if reg:
+                await session.delete(reg)
+                await session.flush()
+                await session.commit()
+                return True, "Successfully unregistered!"
+    except IntegrityError:
+        await session.rollback()
+        return False, "Registration failed due to database constraint."
+    except ValueError as e:
+        await session.rollback()
+        return False, f"❌ Validation error: {str(e)}"
+    except Exception as e:
+        await session.rollback()
+        return False, f"An error occurred: {str(e)}"
         
 

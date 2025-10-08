@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramBadRequest
 
 import asyncio
 import logging
@@ -10,7 +11,8 @@ import logging
 
 from ..database.requests import (set_user, get_user, 
                                  get_events, get_users_events_from_db,
-                                 set_registration)
+                                 set_registration, remove_registration,
+                                 check_user_registration)
 from . import keyboards as kb
 
 router = Router()
@@ -137,6 +139,31 @@ async def get_users_profile(msg: Message):
 async def register_user(cb: CallbackQuery):
     status, msg = await set_registration(int(cb.data.split('_')[1]), cb.from_user.id)
     if status:
+        updated_kb = await kb.create_registered_button(int(cb.data.split('_')[1]))
+        await cb.message.edit_reply_markup(reply_markup=updated_kb)
+        await cb.answer(msg, show_alert=True)
+    else:
+        await cb.answer(msg, show_alert=True)
+        
+@router.callback_query(F.data.startswith('unregister_'))
+async def unregister_user(cb: CallbackQuery):
+    event_id = int(cb.data.split('_')[1])
+    status, msg = await remove_registration(cb.from_user.id, event_id)
+
+    # Re-check registration status to inform keyboard generation
+    is_regd = await check_user_registration(cb.from_user.id, event_id)
+
+    # Only update keyboard if registration state really changed
+    if status and not is_regd:
+        # Show "Register" button now
+        updated_kb = await kb.create_registration_button(event_id, cb.from_user.id)
+        try:
+            await cb.message.edit_reply_markup(reply_markup=updated_kb)
+        except TelegramBadRequest as e:
+            if "message is not modified" in str(e):
+                pass  # Harmless—just ignore
+            else:
+                raise
         await cb.answer(msg, show_alert=True)
     else:
         await cb.answer(msg, show_alert=True)
