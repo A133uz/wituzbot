@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}Create Admin - Event Admin Panel{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h2">
+        <i class="fas fa-user-plus me-2"></i>
+        Create New Admin
+    </h1>
+    <a href="/dashboard" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i>
+        Back to Dashboard
+    </a>
+</div>
+
+<!-- Flash Messages -->
+{% if msgs %}
+    {% for category, message in msgs %}
+        {% if category == 'error' %}
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Error:</strong> {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% elif category == 'warning' %}
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                <strong>Warning:</strong> {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% elif category == 'success' %}
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="fas fa-check-circle me-2"></i>
+                <strong>Success:</strong> {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% else %}
+            <div class="alert alert-info alert-dismissible fade show" role="alert">
+                <i class="fas fa-info-circle me-2"></i>
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-user-cog me-2"></i>
+                    Organizer Details
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="/organizers/create" id="createAdminForm" novalidate>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">
+                                    <i class="fas fa-user me-1"></i>
+                                    Full Name <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="name" name="name" 
+                                       value="{{ form_data.get('name', '') if form_data else '' }}" 
+                                       required minlength="1" maxlength="25">
+                                <div class="invalid-feedback">
+                                    Please enter a valid name (1-25 characters).
+                                </div>
+                                <div class="form-text">Enter the organizer's full name</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="login" class="form-label">
+                                    <i class="fas fa-at me-1"></i>
+                                    Login Username <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="login" name="login" 
+                                       value="{{ form_data.get('login', '') if form_data else '' }}" 
+                                       required minlength="3" maxlength="50" pattern="[a-zA-Z0-9_-]+">
+                                <div class="invalid-feedback">
+                                    Username must be 3-50 characters and contain only letters, numbers, underscores, and hyphens.
+                                </div>
+                                <div class="form-text">Unique username for login (letters, numbers, _, -)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="email" class="form-label">
+                            <i class="fas fa-envelope me-1"></i>
+                            Email Address <span class="text-danger">*</span>
+                        </label>
+                        <input type="email" class="form-control" id="email" name="email" 
+                               value="{{ form_data.get('email', '') if form_data else '' }}" 
+                               required maxlength="100">
+                        <div class="invalid-feedback">
+                            Please enter a valid email address.
+                        </div>
+                        <div class="form-text">Admin's email address for notifications</div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="password" class="form-label">
+                                    <i class="fas fa-lock me-1"></i>
+                                    Password <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="password" name="password" 
+                                           required minlength="8" maxlength="128">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('password')">
+                                        <i class="fas fa-eye" id="passwordToggleIcon"></i>
+                                    </button>
+                                </div>
+                                <div class="invalid-feedback">
+                                    Password must be at least 8 characters and contain uppercase, lowercase, and a number.
+                                </div>
+                                <div class="form-text">
+                                    <div id="passwordRequirements" class="small">
+                                        Password must contain:
+                                        <ul class="mb-0 mt-1">
+                                            <li id="req-length" class="text-muted">At least 8 characters</li>
+                                            <li id="req-upper" class="text-muted">One uppercase letter</li>
+                                            <li id="req-lower" class="text-muted">One lowercase letter</li>
+                                            <li id="req-number" class="text-muted">One number</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="confirmPassword" class="form-label">
+                                    <i class="fas fa-lock me-1"></i>
+                                    Confirm Password <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="confirmPassword" name="confirmPassword" required>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('confirmPassword')">
+                                        <i class="fas fa-eye" id="confirmPasswordToggleIcon"></i>
+                                    </button>
+                                </div>
+                                <div class="invalid-feedback">
+                                    Passwords do not match.
+                                </div>
+                                <div class="form-text">Re-enter the password</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            Organizer Permissions
+                        </label>
+                        <div class="card border-0 bg-light">
+                            <div class="card-body">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="is_superuser" name="is_superuser" 
+                                           {% if form_data and form_data.get('is_superuser') %}checked{% endif %}>
+                                    <label class="form-check-label" for="is_superuser">
+                                        <strong>Superadmin Privileges</strong>
+                                    </label>
+                                </div>
+                                <div class="form-text mt-2">
+                                    <strong>Regular Organizer can:</strong>
+                                    <ul class="mb-2">
+                                        <li>Create, edit, and manage their own events</li>
+                                        <li>View event registrations</li>
+                                        <li>Access dashboard and reports</li>
+                                    </ul>
+                                    <strong>Superadmin can additionally:</strong>
+                                    <ul class="mb-0">
+                                        <li>Create and manage other admins</li>
+                                        <li>View all events across the system</li>
+                                        <li>Activate/deactivate admin accounts</li>
+                                        <li>Access system-wide analytics</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="/dashboard" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>
+                            Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-user-plus me-2"></i>
+                            Create Organizer
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function togglePassword(fieldId) {
+    const field = document.getElementById(fieldId);
+    const icon = document.getElementById(fieldId + 'ToggleIcon');
+    
+    if (field.type === 'password') {
+        field.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        field.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+
+// Password strength validation
+function validatePassword(password) {
+    const requirements = {
+        length: password.length >= 8,
+        upper: /[A-Z]/.test(password),
+        lower: /[a-z]/.test(password),
+        number: /\d/.test(password)
+    };
+    
+    // Update requirement indicators
+    Object.keys(requirements).forEach(req => {
+        const element = document.getElementById(`req-${req}`);
+        if (requirements[req]) {
+            element.classList.remove('text-muted');
+            element.classList.add('text-success');
+        } else {
+            element.classList.remove('text-success');
+            element.classList.add('text-muted');
+        }
+    });
+    
+    return Object.values(requirements).every(req => req);
+}
+
+// Real-time password validation
+document.getElementById('password').addEventListener('input', function() {
+    const password = this.value;
+    const isValid = validatePassword(password);
+    
+    if (password.length > 0) {
+        if (isValid) {
+            this.classList.remove('is-invalid');
+            this.classList.add('is-valid');
+        } else {
+            this.classList.remove('is-valid');
+            this.classList.add('is-invalid');
+        }
+    }
+    
+    // Check confirm password if it has a value
+    const confirmPassword = document.getElementById('confirmPassword');
+    if (confirmPassword.value) {
+        validateConfirmPassword();
+    }
+});
+
+// Confirm password validation
+function validateConfirmPassword() {
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('confirmPassword');
+    
+    if (confirmPassword.value && password === confirmPassword.value) {
+        confirmPassword.classList.remove('is-invalid');
+        confirmPassword.classList.add('is-valid');
+        return true;
+    } else if (confirmPassword.value) {
+        confirmPassword.classList.remove('is-valid');
+        confirmPassword.classList.add('is-invalid');
+        return false;
+    }
+    return false;
+}
+
+document.getElementById('confirmPassword').addEventListener('input', validateConfirmPassword);
+
+// Form validation
+document.getElementById('createAdminForm').addEventListener('submit', function(e) {
+    const form = this;
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    
+    // Custom validation
+    let isValid = true;
+    
+    if (!validatePassword(password)) {
+        isValid = false;
+        document.getElementById('password').classList.add('is-invalid');
+    }
+    
+    if (password !== confirmPassword) {
+        isValid = false;
+        document.getElementById('confirmPassword').classList.add('is-invalid');
+    }
+    
+    if (!form.checkValidity() || !isValid) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    
+    form.classList.add('was-validated');
+}, false);
+
+// Real-time validation for other fields
+document.querySelectorAll('input[type="text"], input[type="email"]').forEach(function(element) {
+    element.addEventListener('blur', function() {
+        if (this.checkValidity()) {
+            this.classList.remove('is-invalid');
+            this.classList.add('is-valid');
+        } else {
+            this.classList.remove('is-valid');
+            this.classList.add('is-invalid');
+        }
+    });
+});
+</script>
+{% endblock %}

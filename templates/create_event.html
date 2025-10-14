@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% block title %}Create Event - Event Admin Panel{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h2">
+        <i class="fas fa-plus me-2"></i>
+        Create New Event
+    </h1>
+    <a href="/dashboard" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i>
+        Back to Dashboard
+    </a>
+</div>
+
+<!-- Flash Messages -->
+{% if msgs %}
+    {% for category, message in msgs %}
+        {% if category == 'error' %}
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Error:</strong> {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% elif category == 'warning' %}
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                <strong>Warning:</strong> {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% elif category == 'success' %}
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="fas fa-check-circle me-2"></i>
+                <strong>Success:</strong> {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% else %}
+            <div class="alert alert-info alert-dismissible fade show" role="alert">
+                <i class="fas fa-info-circle me-2"></i>
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+<!-- Legacy error support -->
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <i class="fas fa-exclamation-triangle me-2"></i>
+    <strong>Error:</strong> {{ error }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="post" action="/events/create" id="createEventForm" novalidate>
+                    <div class="mb-3">
+                        <label for="title" class="form-label">
+                            Event Title <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="title" name="title" 
+                               value="{{ form_data.get('title', '') if form_data else '' }}" 
+                               required minlength="3" maxlength="100">
+                        <div class="invalid-feedback">
+                            Please enter a valid event title (3-100 characters).
+                        </div>
+                        <div class="form-text">Enter a descriptive title for your event</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="desc" class="form-label">
+                            Description <span class="text-danger">*</span>
+                        </label>
+                        <textarea class="form-control" id="desc" name="desc" rows="4" 
+                                  required minlength="10">{{ form_data.desc if form_data and form_data.desc else '' }}</textarea>
+                        <div class="invalid-feedback">
+                            Please enter a detailed description (minimum 10 characters).
+                        </div>
+                        <div class="form-text">Provide detailed information about the event</div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="type" class="form-label">
+                                    Event Type <span class="text-danger">*</span>
+                                </label>
+                                <select class="form-select" id="type" name="type" required>
+                                    <option value="">Select type...</option>
+                                    <option value="online" {% if form_data and form_data.get('type') == 'online' %}selected{% endif %}>Online</option>
+                                    <option value="in_person" {% if form_data and form_data.get('type') == 'in_person' %}selected{% endif %}>In-Person</option>
+                                   
+                                </select>
+                                <div class="invalid-feedback">
+                                    Please select an event type.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="location" class="form-label">
+                                    Location <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="location" name="location" 
+                                       value="{{ form_data.get('location', '') if form_data else '' }}" 
+                                       required minlength="3" maxlength="100">
+                                <div class="invalid-feedback">
+                                    Please enter a valid location (3-100 characters).
+                                </div>
+                                <div class="form-text">Specify where the event will take place</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="date" class="form-label">
+                                    Date <span class="text-danger">*</span>
+                                </label>
+                                <input type="date" class="form-control" id="date" name="date" 
+                                       value="{{ form_data.get('date', '') if form_data else '' }}" 
+                                       required min="{{ today }}">
+                                <div class="invalid-feedback">
+                                    Please select a valid future date.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="time" class="form-label">
+                                    Time <span class="text-danger">*</span>
+                                </label>
+                                <input type="time" class="form-control" id="time" name="time" 
+                                       value="{{ form_data.get('time', '') if form_data else '' }}" 
+                                       required>
+                                <div class="invalid-feedback">
+                                    Please select a valid time.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="/dashboard" class="btn btn-outline-secondary me-md-2">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>
+                            Create Event
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Tips
+                </h6>
+                <ul class="list-unstyled small">
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success me-2"></i>
+                        Use descriptive titles that clearly indicate what the event is about
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success me-2"></i>
+                        Include all relevant details in the description
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success me-2"></i>
+                        Double-check the date and time
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success me-2"></i>
+                        Provide specific location information
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Validation Requirements Card -->
+        <div class="card mt-3 border-info">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-clipboard-check me-2"></i>
+                    Validation Requirements
+                </h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled small mb-0">
+                    <li class="mb-1">• Title: 3-100 characters</li>
+                    <li class="mb-1">• Description: minimum 10 characters</li>
+                    <li class="mb-1">• Type: must be selected</li>
+                    <li class="mb-1">• Location: 3-100 characters</li>
+                    <li class="mb-1">• Date: must be in the future</li>
+                    <li class="mb-1">• Time: 24-hour format</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Set minimum date to today
+document.getElementById('date').min = new Date().toISOString().split('T')[0];
+
+// Form validation
+document.getElementById('createEventForm').addEventListener('submit', function(e) {
+    const form = this;
+    if (!form.checkValidity()) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    form.classList.add('was-validated');
+}, false);
+
+// Real-time validation feedback
+document.querySelectorAll('input, textarea, select').forEach(function(element) {
+    element.addEventListener('blur', function() {
+        if (this.checkValidity()) {
+            this.classList.remove('is-invalid');
+            this.classList.add('is-valid');
+        } else {
+            this.classList.remove('is-valid');
+            this.classList.add('is-invalid');
+        }
+    });
+});
+</script>
+{% endblock %}

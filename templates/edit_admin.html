@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Admin - Event Admin Panel{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h2">
+        <i class="fas fa-user-edit me-2"></i>
+        Edit Organizer: {{ organier.name }}
+        {% if organier.is_superuser %}
+        <span class="badge bg-warning text-dark ms-2">Superadmin</span>
+        {% endif %}
+    </h1>
+    <a href="/dashboard" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i>
+        Back to Dashboard
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-user-cog me-2"></i>
+                    Organizer Details
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="/organizers/{{ organizer.id }}/edit" id="editOrganizerForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">
+                                    <i class="fas fa-user me-1"></i>
+                                    Full Name <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="name" name="name" value="{{ organizer.name }}" required>
+                                <div class="form-text">Enter the admin's name</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="login" class="form-label">
+                                    <i class="fas fa-at me-1"></i>
+                                    Login Username <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="login" name="login" value="{{ organizer.login }}" required>
+                                <div class="form-text">Unique username for login</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="email" class="form-label">
+                            <i class="fas fa-envelope me-1"></i>
+                            Email Address <span class="text-danger">*</span>
+                        </label>
+                        <input type="email" class="form-control" id="email" name="email" value="{{ organizer.email }}" required>
+                        <div class="form-text">Admin's email address for notifications</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">
+                            <i class="fas fa-key me-1"></i>
+                            Password
+                        </label>
+                        <div class="card border-0 bg-light">
+                            <div class="card-body">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="changePassword" name="changePassword">
+                                    <label class="form-check-label" for="changePassword">
+                                        Change Password
+                                    </label>
+                                </div>
+                                
+                                <div id="passwordFields" style="display: none;">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="password" class="form-label">New Password</label>
+                                                <div class="input-group">
+                                                    <input type="password" class="form-control" id="password" name="password">
+                                                    <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('password')">
+                                                        <i class="fas fa-eye" id="passwordToggleIcon"></i>
+                                                    </button>
+                                                </div>
+                                                <div class="form-text">Minimum 8 characters</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="confirmPassword" class="form-label">Confirm New Password</label>
+                                                <div class="input-group">
+                                                    <input type="password" class="form-control" id="confirmPassword" name="confirmPassword">
+                                                    <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('confirmPassword')">
+                                                        <i class="fas fa-eye" id="confirmPasswordToggleIcon"></i>
+                                                    </button>
+                                                </div>
+                                                <div class="form-text">Re-enter the new password</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">
+                            <i class="fas fa-toggle-on me-1"></i>
+                            Account Status
+                        </label>
+                        <div class="card border-0 bg-light">
+                            <div class="card-body">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
+                                           {% if admin.is_active %}checked{% endif %}>
+                                    <label class="form-check-label" for="is_active">
+                                        <strong>Account Active</strong>
+                                    </label>
+                                </div>
+                                <div class="form-text">Inactive organizers cannot log in to the system</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            Organizer Permissions
+                        </label>
+                        <div class="card border-0 bg-light">
+                            <div class="card-body">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="is_superuser" name="is_superuser"
+                                           {% if organizer.is_superuser %}checked{% endif %}>
+                                    <label class="form-check-label" for="is_superuser">
+                                        <strong>Superadmin Privileges</strong>
+                                    </label>
+                                </div>
+                                <div class="form-text mt-2">
+                                    <strong>Regular Admin can:</strong>
+                                    <ul class="mb-2">
+                                        <li>Create, edit, and manage their own events</li>
+                                        <li>View event registrations</li>
+                                        <li>Access dashboard and reports</li>
+                                    </ul>
+                                    <strong>Superadmin can additionally:</strong>
+                                    <ul class="mb-0">
+                                        <li>Create and manage other admins</li>
+                                        <li>View all events across the system</li>
+                                        <li>Activate/deactivate admin accounts</li>
+                                        <li>Access system-wide analytics</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Admin Statistics -->
+                    <div class="mb-4">
+                        <label class="form-label">
+                            <i class="fas fa-chart-bar me-1"></i>
+                            Admin Statistics
+                        </label>
+                        <div class="card border-0 bg-light">
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-md-4">
+                                        <div class="mb-2">
+                                            <i class="fas fa-calendar-alt fa-2x text-primary"></i>
+                                        </div>
+                                        <h5 class="mb-1">{{ organier.events|length }}</h5>
+                                        <small class="text-muted">Events Created</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-2">
+                                            <i class="fas fa-users fa-2x text-success"></i>
+                                        </div>
+                                        <h5 class="mb-1">{{ organizer.events|sum(attribute='registrations')|length or 0 }}</h5>
+                                        <small class="text-muted">Total Registrations</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-2">
+                                            <i class="fas fa-clock fa-2x text-info"></i>
+                                        </div>
+                                        <h5 class="mb-1">{{ organier.events|selectattr('date_time', 'gt', moment().datetime)|list|length or 0 }}</h5>
+                                        <small class="text-muted">Upcoming Events</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="/dashboard" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>
+                            Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>
+                            Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Toggle password visibility
+function togglePassword(fieldId) {
+    const field = document.getElementById(fieldId);
+    const icon = document.getElementById(fieldId + 'ToggleIcon');
+    
+    if (field.type === 'password') {
+        field.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        field.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+
+// Show/hide password fields based on checkbox
+document.getElementById('changePassword').addEventListener('change', function() {
+    const passwordFields = document.getElementById('passwordFields');
+    const passwordInput = document.getElementById('password');
+    const confirmPasswordInput = document.getElementById('confirmPassword');
+    
+    if (this.checked) {
+        passwordFields.style.display = 'block';
+        passwordInput.required = true;
+        confirmPasswordInput.required = true;
+    } else {
+        passwordFields.style.display = 'none';
+        passwordInput.required = false;
+        confirmPasswordInput.required = false;
+        passwordInput.value = '';
+        confirmPasswordInput.value = '';
+    }
+});
+
+// Form validation
+document.getElementById('editAdminForm').addEventListener('submit', function(e) {
+    const changePassword = document.getElementById('changePassword').checked;
+    
+    if (changePassword) {
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        
+        if (password.length < 8) {
+            e.preventDefault();
+            alert('Password must be at least 8 characters long.');
+            return;
+        }
+        
+        if (password !== confirmPassword) {
+            e.preventDefault();
+            alert('Passwords do not match.');
+            return;
+        }
+    }
+});
+
+// Real-time password validation
+document.getElementById('confirmPassword').addEventListener('input', function() {
+    const password = document.getElementById('password').value;
+    const confirmPassword = this.value;
+    
+    if (confirmPassword && password !== confirmPassword) {
+        this.classList.add('is-invalid');
+    } else {
+        this.classList.remove('is-invalid');
+    }
+});
+</script>
+{% endblock %}

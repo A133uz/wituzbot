@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.title }} - Event Admin Panel{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h2">
+        <i class="fas fa-calendar-alt me-2"></i>
+        {{ event.title }}
+    </h1>
+    <div class="btn-group">
+        <a href="/events/{{ event.id }}/edit" class="btn btn-outline-primary">
+            <i class="fas fa-edit me-2"></i>
+            Edit Event
+        </a>
+        <a href="/dashboard" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>
+            Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Event Details -->
+<div class="row mb-4">
+    <div class="col-lg-8">
+        <div class="card event-card">
+            <div class="card-body">
+                <h5 class="card-title">Event Details</h5>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong><i class="fas fa-calendar me-2"></i>Date:</strong> {{ event.local_datetime.strftime('%B %d, %Y') }}</p>
+                        <p><strong><i class="fas fa-clock me-2"></i>Time:</strong> {{ event.local_datetime.strftime('%H:%M') }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong><i class="fas fa-map-marker-alt me-2"></i>Location:</strong> {{ event.location }}</p>
+                        <p><strong><i class="fas fa-tag me-2"></i>Type:</strong> <span class="badge bg-secondary">{{ event.type|title }}</span></p>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <h6>Description</h6>
+                <p class="text-muted">{{ event.desc }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="registration-count">{{ registrations|length }}</div>
+                <p class="text-muted mb-0">Total Registrations</p>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="fas fa-download me-2"></i>
+                    Export Data
+                </h6>
+                <button class="btn btn-outline-primary btn-sm w-100 mb-2" onclick="exportRegistrations()">
+                    <i class="fas fa-file-csv me-2"></i>
+                    Export as CSV
+                </button>
+                <button class="btn btn-outline-success btn-sm w-100" onclick="exportRegistrationsExcel()">
+                    <i class="fas fa-file-excel me-2"></i>
+                    Export as Excel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Registrations Table -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-users me-2"></i>
+            Registrations ({{ registrations|length }})
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if registrations %}
+        <div class="table-responsive">
+            <table class="table table-hover" id="registrationsTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Organization</th>
+                        <th>Registration Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for registration in registrations %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="avatar bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                                    {{ registration.user.name[0]|upper }}{{ registration.user.surname[0]|upper }}
+                                </div>
+                                <div>
+                                    <strong>{{ registration.user.name }} {{ registration.user.surname }}</strong>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <a href="mailto:{{ registration.user.email }}" class="text-decoration-none">
+                                <i class="fas fa-envelope me-1"></i>
+                                {{ registration.user.email }}
+                            </a>
+                        </td>
+                        <td>{{ registration.user.org }}</td>
+                        <td>
+                            <small class="text-muted">
+                                {{ registration.created_at.strftime('%Y-%m-%d %H:%M') }}
+                            </small>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-primary" title="Send Email" 
+                                        onclick="sendEmail('{{ registration.user.email }}')">
+                                    <i class="fas fa-envelope"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-user-plus fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">No registrations yet</h5>
+            <p class="text-muted">Registrations will appear here once users sign up for this event.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function exportRegistrations() {
+    // Simple CSV export
+    const table = document.getElementById('registrationsTable');
+    const rows = table.querySelectorAll('tr');
+    let csv = [];
+    
+    for (let i = 0; i < rows.length; i++) {
+        const row = [], cols = rows[i].querySelectorAll('td, th');
+        
+        for (let j = 0; j < cols.length - 1; j++) { // Skip actions column
+            let data = cols[j].innerText.replace(/"/g, '""');
+            row.push('"' + data + '"');
+        }
+        csv.push(row.join(','));
+    }
+    
+    const csvFile = new Blob([csv.join('\n')], { type: 'text/csv' });
+    const downloadLink = document.createElement('a');
+    downloadLink.download = '{{ event.title|replace(" ", "_") }}_registrations.csv';
+    downloadLink.href = window.URL.createObjectURL(csvFile);
+    downloadLink.style.display = 'none';
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+}
+
+function exportRegistrationsExcel() {
+    alert('Excel export functionality would be implemented here');
+}
+</script>
+{% endblock %}
