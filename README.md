@@ -1,24 +1,35 @@
-env:
+env for admin panel:
 ```
-bot_token=your_bot_token
+secret_key=your_secret_key
+algorithm=encryption_algorithm
+access_token_expire_hours=24
+
+admin_name=SuperAdmin
+admin_login=admin
+admin_email=admin@example.com
+admin_pass=admin123
+admin_is_superuser=True
+admin_is_active=True 
+```
+
+env for bots:
+```
+#for main bot
+tg_token=your_tg_token
+
+#for feedback bot
+tg_token=your_tg_token
+
+admin_chat_id=your_chat_id
+```
+
+main env:
+```
+redis_url=redis://localhost:6379/0
 
 db_host=localhost
 db_port=5432
-db_user=postgresuser
-db_pass=your-secret-pass
-db_name=yourpg
-
-redis_url=redis://localhost:6379/0
-
-secret_key=your-secret-key
-
-algorithm=uralgo
-access_token_expire_hours=1
-
-admin_name=admin
-admin_login=your-login
-admin_email=your-email
-admin_pass=ayour-secret-admin-password
-admin_is_superuser=True
-admin_is_active=True 
+db_user=your-user
+db_pass=your-password
+db_name=your-name
 ```
