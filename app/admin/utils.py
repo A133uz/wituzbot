@@ -2,7 +2,9 @@ from typing import Optional
 import datetime, jwt
 from fastapi import Request
 from passlib.context import CryptContext
-from ..database.config import settings
+from .config import AdminSettings
+
+settings = AdminSettings()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

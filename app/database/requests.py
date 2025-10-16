@@ -2,7 +2,7 @@ from .models import User, Registration, Event, Organizer
 from sqlalchemy import select, update, delete
 from sqlalchemy.exc import IntegrityError
 from typing import Dict
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .database import get_session
 from .schemas import UserCreate, RegistrationCreate
@@ -25,7 +25,7 @@ async def get_events():
         async with get_session() as session:
             res = await session.execute(
                 select(Event)
-                .where(Event.date_time > datetime.now())
+                .where(Event.date_time > datetime.now(timezone.utc))
                 .order_by(Event.date_time)
             )
             return res.scalars().all()
@@ -105,4 +105,5 @@ async def remove_registration(tg_id: int, event_id: int):
         await session.rollback()
         return False, f"An error occurred: {str(e)}"
         
+
 

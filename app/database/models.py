@@ -97,7 +97,7 @@ class Registration(Base):
         Index('idx_event_id', 'event_id'),
         Index('idx_user_id', 'user_id'),
     )
-    
+        
 async def async_main():
     async with as_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)   

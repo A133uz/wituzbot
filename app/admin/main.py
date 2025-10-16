@@ -8,26 +8,38 @@ from fastapi.exceptions import RequestValidationError
 import pytz
 from starlette.middleware.sessions import SessionMiddleware
 
+from .utils import *
+
+import sys
+from pathlib import Path
+
+
+sys.path.append(str(Path(__file__).parent.parent)) 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload, Session
 
-from ..database.database import get_async_db, get_sync_db, get_sync_session
-from ..database.config import settings
-from ..database.models import Organizer, Event, Registration
-from ..database.schemas import EventCreate, EventUpdate, OrganizerCreate, OrganizerUpdate, LoginRequest
+from database.database import get_async_db, get_sync_db, get_sync_session
+from .config import AdminSettings
+from database.models import Organizer, Event, Registration, async_main
+from database.schemas import EventCreate, EventUpdate, OrganizerCreate, OrganizerUpdate, LoginRequest
+from .init_admin import create_initial_superuser
 
+
+sys.path.append(str(Path(__file__).parent.parent.parent)) 
 from reminder_system  import _auto_schedule_reminder, update_event_and_reschedule, _cancel_reminder
-
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import logging
+import uvicorn
+import asyncio
 
-from .utils import *
+
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+settings = AdminSettings()
 
 app = FastAPI(title="Event Admin Panel")
 
@@ -179,7 +191,7 @@ async def dashboard(
     events = result.scalars().all()
     
     # Calculate statistics in Python, not in template
-    now = datetime.datetime.now()
+    now = datetime.now()
     total_events = len(events)
     upcoming_events = [e for e in events if e.date_time > now]
     upcoming_events_count = len(upcoming_events)
@@ -188,7 +200,7 @@ async def dashboard(
     total_registrations = sum(len(event.registrations) for event in events)
     
     # Calculate recent registrations (last 30 days)
-    thirty_days_ago = datetime.datetime.now() - timedelta(days=30)
+    thirty_days_ago = datetime.now() - timedelta(days=30)
     recent_registrations = 0
     for event in events:
         for reg in event.registrations:
@@ -244,7 +256,7 @@ async def create_event(
     organizer = Depends(get_current_organizer)
 ):
     try:
-        event_datetime = datetime.datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")
+        event_datetime = datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")
         logger.info(f"📝 Parsed input: {event_datetime}")
 
         tashkent_tz = pytz.timezone('Asia/Tashkent')
@@ -325,40 +337,6 @@ async def event_detail(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    
-    # Mock data - replace with real queries
-    #event = {
-    #    "id": event_id,
-    #    "title": "Tech Conference 2025",
-    #    "desc": "A comprehensive tech conference covering latest trends",
-    #    "date_time": datetime(2025, 8, 15, 10, 0),
-    #    "location": "Tech Center",
-    #    "type": "conference"
-    #}
-    #
-    #registrations = [
-    #    {
-    #        "id": 1,
-    #        "user": {
-    #            "name": "John",
-    #            "surname": "Doe",
-    #            "email": "john@example.com",
-    #            "org": "Tech Corp"
-    #        },
-    #        "created_at": datetime(2025, 7, 20, 15, 30)
-    #    },
-    #    {
-    #        "id": 2,
-    #        "user": {
-    #            "name": "Jane",
-    #            "surname": "Smith",
-    #            "email": "jane@example.com",
-    #            "org": "Innovation Ltd"
-    #        },
-    #        "created_at": datetime(2025, 7, 21, 9, 15)
-    #    }
-    #]
-    
     return templates.TemplateResponse("event_detail.html", {
         "request": request,
         "organizer": organizer,
@@ -411,7 +389,7 @@ async def edit_event(
 ):
     try:
         # Parse input
-        event_datetime_naive = datetime.datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")
+        event_datetime_naive = datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")
         
         # Convert Tashkent → UTC (same as create endpoint)
         tashkent_tz = pytz.timezone('Asia/Tashkent')
@@ -475,14 +453,12 @@ async def delete_event(
         raise HTTPException(status_code=404, detail="Event not found")
     
     try:
-        if event.celery_task_id:  # Only if there's a scheduled reminder
+        if event.celery_task_id:  
             with get_sync_session() as sync_db:
                 
                 
-                # Get event in sync session
                 sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
 
-                # Cancel reminder task
                 _cancel_reminder(sync_event, sync_db)
                 logger.info(f"🗑️ Cancelled reminder for event {event_id} before deletion")
 
@@ -713,5 +689,16 @@ async def delete_admin(
     
 
 
+async def main():
+    await async_main()
+    await create_initial_superuser()
+    config = uvicorn.Config("app.admin.main:app", host="0.0.0.0", port=8000, reload=True)
+    server = uvicorn.Server(config)
+    await server.serve()
     
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Admin panel has been stopped")
 

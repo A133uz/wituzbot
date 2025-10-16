@@ -1,27 +1,13 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import  EmailStr
+from pathlib import Path
 
-
-class Settings(BaseSettings):
-    tg_token: str
+class DatabaseSettings(BaseSettings):
     db_host: str
     db_port: int
     db_user: str
     db_pass: str
     db_name: str
     redis_url: str
-    
-    secret_key: str
-    algorithm: str
-    access_token_expire_hours: int
-    
-    admin_name: str
-    admin_login: str
-    admin_email: EmailStr
-    admin_pass: str
-    admin_is_superuser: bool
-    admin_is_active: bool 
-    
     
     @property
     def DATABASE_URL_asyncpg(self):
@@ -36,6 +22,4 @@ class Settings(BaseSettings):
         return "sqlite:///db.sqlite3"
     
         
-    model_config = SettingsConfigDict(env_file=".env")
-    
-settings = Settings()
+    model_config = SettingsConfigDict(env_file=Path(__file__).parent.parent.parent / ".env")

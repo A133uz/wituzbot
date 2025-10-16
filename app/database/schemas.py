@@ -2,6 +2,13 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 from typing import Optional, List
 from datetime import datetime
 from .enums import EventTypeEnum
+import sys
+from pathlib import Path
+
+
+app_dir = Path(__file__).parent.parent  # Goes from database/ up to app/
+sys.path.insert(0, str(app_dir))
+
 from utils.form_helpers import as_form
 import re
 

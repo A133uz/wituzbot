@@ -5,15 +5,22 @@ import uvicorn
 from aiogram import Bot, Dispatcher
 from app.database.models import async_main, Organizer
 from app.database.database import get_session
-from app.database.config import settings
+from app.admin.config import Settings
+from app.database.config import Settings
 from app.bot.handlers import router
+# from app.feedback_bot.handlers import feedback_router
 from app.admin.utils import get_password_hash
 
 
 from sqlalchemy import select
 
+ap_settings = Settings()
+bot_settings = Settings()
+# fb_bot_settings = Settings()
 
-bot = Bot(token=settings.tg_token)
+
+bot = Bot(token=bot_settings.tg_token)
+# fb_bot = Bot(token=fb_bot_settings.tg_token)
 dp = Dispatcher()
 
 async def start_server():
@@ -23,6 +30,7 @@ async def start_server():
     
 async def start_bot():
     dp.include_router(router)
+    #dp.include_router(feedback_router)
     await dp.start_polling(bot)
     
 
@@ -34,12 +42,12 @@ async def main():
             superuser = res.first()
             if not superuser:
                 initial_superuser = Organizer(
-                    name=settings.admin_name,
-                    login=settings.admin_login,
-                    email=settings.admin_email,
-                    password_hash=get_password_hash(settings.admin_pass),  # Change this!
-                    is_superuser=settings.admin_is_superuser,
-                    is_active=settings.admin_is_active
+                    name=ap_settings.admin_name,
+                    login=ap_settings.admin_login,
+                    email=ap_settings.admin_email,
+                    password_hash=get_password_hash(ap_settings.admin_pass),  # Change this!
+                    is_superuser=ap_settings.admin_is_superuser,
+                    is_active=ap_settings.admin_is_active
                 )
                 
                 session.add(initial_superuser)

@@ -135,6 +135,21 @@ async def get_users_profile(msg: Message):
         logger.error(f"Error in the handler: {e}")
         await msg.answer("Something went wrong. Try again later")
         
+@router.message(F.text == "Contacts")
+async def show_contacts(msg: Message):
+    await msg.answer(f"🐛 <b>Found a Bug? We Want to Hear About It!</b>\n\n"
+    f"If you've encountered any issues or bugs while using our service, "
+    f"please don't hesitate to report them! Your feedback helps us improve.\n\n"
+    f"📝 <b>How to report:</b>\n"
+    f"Send a message to our feedback bot: @wituzfeedback_bot \n\n" 
+    f"You can send:\n"
+    f"• Text descriptions of the problem\n"
+    f"• Screenshots or videos showing the issue\n"
+    f"• Any files that might help us understand the bug\n\n"
+    f"We appreciate your help in making our service better! 🙏",
+    parse_mode='HTML')
+
+        
 @router.callback_query(F.data.startswith('register_'))
 async def register_user(cb: CallbackQuery):
     status, msg = await set_registration(int(cb.data.split('_')[1]), cb.from_user.id)
