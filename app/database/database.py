@@ -7,8 +7,8 @@ from contextlib import asynccontextmanager, contextmanager
 
 settings = DatabaseSettings()
 
-as_engine = create_async_engine(url=settings.DATABASE_URL_aiosqlite, echo=True) #TODO: have to change to pg for prod
-s_engine = create_engine(url=settings.DATABASE_URL_sqlite, echo=True)
+as_engine = create_async_engine(url=settings.DATABASE_URL_asyncpg, echo=True) #TODO: have to change to pg for prod
+s_engine = create_engine(url=settings.DATABASE_URL_syncpg, echo=True)
 
 async_session = async_sessionmaker(as_engine, class_=AsyncSession, expire_on_commit=False)
 sync_session = sessionmaker(s_engine, class_=Session, expire_on_commit=False)

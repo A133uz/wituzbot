@@ -10,16 +10,16 @@ class AdminSettings(BaseSettings):
     # db_pass: str
     # db_name: str
     
-    admin_name: str
-    admin_login: str
-    admin_email: EmailStr
-    admin_pass: str
-    admin_is_superuser: bool
-    admin_is_active: bool 
+    ADMIN_NAME: str
+    ADMIN_LOGIN: str
+    ADMIN_EMAIL: EmailStr
+    ADMIN_PASS: str
+    ADMIN_IS_SUPERUSER: bool
+    ADMIN_IS_ACTIVE: bool 
     
-    secret_key: str
-    algorithm: str
-    access_token_expire_hours: int
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_HOURS: int
     
     # @property
     # def DATABASE_URL_asyncpg(self):
@@ -34,4 +34,4 @@ class AdminSettings(BaseSettings):
     #     return "sqlite:///db.sqlite3"
     
         
-    model_config = SettingsConfigDict(env_file=Path(__file__).parent / ".env")
+    model_config = SettingsConfigDict(env_file=".env.admin")

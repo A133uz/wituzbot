@@ -1,0 +1,26 @@
+FROM wituzbot-base:latest
+
+
+COPY app/admin ./app/admin
+COPY static ./static
+COPY templates ./templates
+
+COPY app/migrations ./app/migrations  
+COPY alembic.ini .
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+COPY .env .env.database             
+COPY app/admin/.env .env.admin 
+
+
+
+ENV DATABASE_ENV_FILE=.env.database
+ENV SERVICE_ENV_FILE=.env.admin
+
+EXPOSE 8000
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+CMD ["python", "-m", "app.admin.main"]

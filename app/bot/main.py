@@ -5,7 +5,7 @@ from .handlers import router
 
 settings = MainBotSettings()
 dp = Dispatcher()
-bot = Bot(token=settings.tg_token)
+bot = Bot(token=settings.TG_TOKEN)
 
 async def main():
     dp.include_router(router)

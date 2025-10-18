@@ -19,12 +19,12 @@ async def create_initial_superuser():
             superuser = res.first()
             if not superuser:
                 initial_superuser = Organizer(
-                    name=settings.admin_name,
-                    login=settings.admin_login,
-                    email=settings.admin_email,
-                    password_hash=get_password_hash(settings.admin_pass),
-                    is_superuser=settings.admin_is_superuser,
-                    is_active=settings.admin_is_active
+                    name=settings.ADMIN_NAME,
+                    login=settings.ADMIN_LOGIN,
+                    email=settings.ADMIN_EMAIL,
+                    password_hash=get_password_hash(settings.ADMIN_PASS),
+                    is_superuser=settings.ADMIN_IS_SUPERUSER,
+                    is_active=settings.ADMIN_IS_ACTIVE
                 )
                 
                 session.add(initial_superuser)

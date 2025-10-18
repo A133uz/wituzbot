@@ -6,7 +6,7 @@ from .config import FeedbackBotSettings
 settings = FeedbackBotSettings()
 
 feedback_router = Router()
-bot = Bot(token=settings.tg_token)
+bot = Bot(token=settings.TG_TOKEN)
 
 @feedback_router.message(CommandStart())
 async def start_cmd(msg: Message):
@@ -17,7 +17,7 @@ async def start_cmd(msg: Message):
      
 @feedback_router.message()
 async def handle_feedback(msg: Message):
-    admin_chat_id = settings.admin_chat_id
+    admin_chat_id = settings.ADMIN_CHAT_ID
     
     if msg.text:
         await bot.send_message(

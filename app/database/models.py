@@ -22,7 +22,7 @@ class User(Base):
     __tablename__ = "users"
     
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    telegram_id = mapped_column(BigInteger)
+    telegram_id = mapped_column(BigInteger, unique=True)
     
     name: Mapped[str_25] 
     surname: Mapped[str_25]

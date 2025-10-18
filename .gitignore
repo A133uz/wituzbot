@@ -55,6 +55,6 @@ coverage.xml
 test-results/
 
 # Migrations (optional)
-migrations/
+app/migrations/versions/*.py
 
 # Static/media files (if

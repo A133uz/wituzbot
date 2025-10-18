@@ -1,0 +1,6 @@
+FROM wituzbot-base:latest
+
+COPY app/feedback_bot ./app/feedback_bot
+COPY app/feedback_bot/.env .env.feedback_bot
+
+CMD ["python", "-m", "app.feedback_bot.main"]

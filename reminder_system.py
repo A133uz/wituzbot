@@ -17,8 +17,8 @@ bot_settings = MainBotSettings()
 
 celery_app = Celery(
     "reminder_system",
-    broker=settings.redis_url,
-    backend=settings.redis_url
+    broker=settings.REDIS_URL,
+    backend=settings.REDIS_URL
 )
 
 celery_app.conf.update(
@@ -167,7 +167,7 @@ async def send_telegram_reminder(event: Event):
     """Send reminder message via Telegram"""
     try:
         from aiogram import Bot
-        bot = Bot(token=bot_settings.tg_token)
+        bot = Bot(token=bot_settings.TG_TOKEN)
         
         
         # Format reminder message

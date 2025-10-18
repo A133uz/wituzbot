@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 class FeedbackBotSettings(BaseSettings):
-    tg_token: str
-    admin_chat_id: int
+    TG_TOKEN: str
+    ADMIN_CHAT_ID: int
       
-    model_config = SettingsConfigDict(env_file=Path(__file__).parent / ".env")
+    model_config = SettingsConfigDict(env_file=".env.feedback_bot")

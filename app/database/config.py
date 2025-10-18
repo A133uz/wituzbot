@@ -2,16 +2,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
 class DatabaseSettings(BaseSettings):
-    db_host: str
-    db_port: int
-    db_user: str
-    db_pass: str
-    db_name: str
-    redis_url: str
+    DB_HOST: str
+    DB_PORT: int = 5432
+    DB_USER: str
+    DB_PASS: str
+    DB_NAME: str
+    REDIS_URL: str
+    TG_TOKEN: str
     
     @property
     def DATABASE_URL_asyncpg(self):
-        return f"postgresql+psycopg://{self.db_user}:{self.db_pass}@{self.db_host}:{self.db_port}/{self.db_name}"
+        return f"postgresql+psycopg://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+    
+    @property
+    def DATABASE_URL_syncpg(self):
+        return f"postgresql+psycopg://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
     
     @property
     def DATABASE_URL_aiosqlite(self):
@@ -22,4 +27,4 @@ class DatabaseSettings(BaseSettings):
         return "sqlite:///db.sqlite3"
     
         
-    model_config = SettingsConfigDict(env_file=Path(__file__).parent.parent.parent / ".env")
+    model_config = SettingsConfigDict(env_file=".env.database", extra='ignore')

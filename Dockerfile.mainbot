@@ -1,0 +1,6 @@
+FROM wituzbot-base:latest
+
+COPY app/bot/.env .env.mainbot
+
+CMD ["python", "-m", "app.bot.main"]
+

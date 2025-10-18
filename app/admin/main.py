@@ -51,7 +51,7 @@ templates = Jinja2Templates(directory="templates")
 # Static files (for CSS/JS)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 security = HTTPBearer(auto_error=False)
 
@@ -60,7 +60,7 @@ security = HTTPBearer(auto_error=False)
 
 # Dependency to get current organizer
 def get_current_organizer(request: Request, db: Session = Depends(get_sync_db),
-                          creds: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Optional[Organizer]:
+                          creds: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Organizer:
     
     token = request.cookies.get("access_token")
     
@@ -68,19 +68,33 @@ def get_current_organizer(request: Request, db: Session = Depends(get_sync_db),
         token = creds.credentials
         
     if not token:
-        return
+        raise HTTPException(  
+            status_code=401,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     
     payload = verify_token(token)
     if not payload:
-        return
+        raise HTTPException(  
+            status_code=401,
+            detail="Invalid or expired token"
+        )
     
     organizer_id = payload.get("sub")
     if not organizer_id:
-        return
+        raise HTTPException(  
+            status_code=401,
+            detail="Invalid token payload"
+        )
     
-    organizer = db.query(Organizer).filter(Organizer.id == organizer_id).first()
+    organizer = db.query(Organizer).filter(Organizer.id == int(organizer_id)).first()
     if not organizer or not organizer.is_active:
-        return
+        raise HTTPException(  
+            status_code=401,
+            detail="Organizer not found"
+        )
     return organizer
     
 async def require_auth(organizer: Organizer = Depends(get_current_organizer)):
@@ -149,9 +163,9 @@ async def login(
         return RedirectResponse(url="/login", status_code=302)
     
     # Create access token
-    access_token_expires = timedelta(hours=settings.access_token_expire_hours if credentials.remember else 1)
+    access_token_expires = timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS if credentials.remember else 1)
     access_token = create_access_token(
-        data={"sub": str(organizer.id)}, expires_delta=access_token_expires
+        data={"sub": organizer.id}, expires_delta=access_token_expires
     )
     
     # Set cookie
