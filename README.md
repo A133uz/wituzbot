@@ -1,35 +1,46 @@
-env for admin panel:
+## For Docker:
 ```
-secret_key=your_secret_key
-algorithm=encryption_algorithm
-access_token_expire_hours=24
-
-admin_name=SuperAdmin
-admin_login=admin
-admin_email=admin@example.com
-admin_pass=admin123
-admin_is_superuser=True
-admin_is_active=True 
+docker compose run --rm admin alembic revision --autogenerate -m "initial migration"
+docker compose up -d --build
+docker compose restart
 ```
 
-env for bots:
+## env for admin panel:
+```
+SECRET_KEY=your_secret_key
+ALGORITHM=encryption_algorithm
+ACCESS_TOKEN_EXPIRE_HOURS=24
+
+ADMIN_NAME=SuperAdmin
+ADMIN_LOGIN=admin
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASS=admin123
+ADMIN_IS_SUPERUSER=True
+ADMIN_IS_ACTIVE=True 
+```
+
+## env for bots:
 ```
 #for main bot
-tg_token=your_tg_token
+TG_TOKEN=your_tg_token
 
 #for feedback bot
-tg_token=your_tg_token
+TG_TOKEN=your_tg_token
 
-admin_chat_id=your_chat_id
+ADMIN_CHAT_ID=your_chat_id
 ```
 
-main env:
+## main env:
 ```
-redis_url=redis://localhost:6379/0
+REDIS_URL=redis://redis:6379/0 #for docker. if running locally, instead of redis -> localhost
 
-db_host=localhost
-db_port=5432
-db_user=your-user
-db_pass=your-password
-db_name=your-name
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=your-user
+DB_PASS=your-password
+DB_NAME=your-name
+
+POSTGRES_DB=${DB_NAME}         
+POSTGRES_USER=${DB_USER}       
+POSTGRES_PASSWORD=${DB_PASS} 
 ```

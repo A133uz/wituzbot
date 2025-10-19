@@ -165,7 +165,7 @@ async def login(
     # Create access token
     access_token_expires = timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS if credentials.remember else 1)
     access_token = create_access_token(
-        data={"sub": organizer.id}, expires_delta=access_token_expires
+        data={"sub": str(organizer.id)}, expires_delta=access_token_expires
     )
     
     # Set cookie
@@ -196,15 +196,15 @@ async def dashboard(
     db: AsyncSession = Depends(get_async_db),
     current_organizer = Depends(get_current_organizer)
 ):
-    # Replace with actual database queries
-    query = select(Event).where(Event.organizer_id == current_organizer.id).options(
+    
+    query = select(Event).options(
         selectinload(Event.registrations)
     )
     
     result = await db.execute(query)
     events = result.scalars().all()
     
-    # Calculate statistics in Python, not in template
+    
     now = datetime.now()
     total_events = len(events)
     upcoming_events = [e for e in events if e.date_time > now]
@@ -339,10 +339,10 @@ async def event_detail(
     db: AsyncSession = Depends(get_async_db),
     organizer = Depends(get_current_organizer)
 ):
-    # Replace with actual database queries
+    
     
     res = await db.execute(select(Event)
-                           .filter(Event.id == event_id, Event.organizer_id == organizer.id)
+                           .filter(Event.id == event_id)
                            .options(
                                selectinload(Event.registrations).selectinload(Registration.user)
                            ))
@@ -368,7 +368,7 @@ async def edit_event_form(
 ):
     # Replace with actual database query
     
-    res = await db.execute(select(Event).filter(Event.id == event_id, Event.organizer_id == organizer.id))
+    res = await db.execute(select(Event).filter(Event.id == event_id))
 
     event = res.scalar_one_or_none()
     
@@ -414,7 +414,7 @@ async def edit_event(
         logger.info(f"Editing event {event_id}: {event_datetime_tashkent} → {utc_naive} UTC")
         
         # Get event
-        res = await db.execute(select(Event).filter(Event.id == event_id, Event.organizer_id == organizer.id))
+        res = await db.execute(select(Event).filter(Event.id == event_id))
         event = res.scalar_one_or_none()
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
@@ -460,7 +460,7 @@ async def delete_event(
 ):
     
     # Delete event - replace with actual database operation
-    res = await db.execute(select(Event).filter(Event.id == event_id, Event.organizer_id == organizer.id))
+    res = await db.execute(select(Event).filter(Event.id == event_id))
     
     event = res.scalar_one_or_none()
     if not event:

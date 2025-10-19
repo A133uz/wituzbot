@@ -54,7 +54,7 @@ services:
     container_name: wituzbot_admin
     depends_on:
       base:
-        condition: service_completed_successfully
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -148,19 +148,7 @@ services:
       - celery_beat_data:/app/data
     restart: unless-stopped
 
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: wituzbot_pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    depends_on:
-      - postgres
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    restart: unless-stopped
+  
 
 volumes:
   postgres_data:
@@ -168,8 +156,6 @@ volumes:
   redis_data:
     driver: local
   celery_beat_data:
-    driver: local
-  pgadmin_data:
     driver: local
 
 

@@ -146,33 +146,65 @@
 {% block scripts %}
 <script>
 function exportRegistrations() {
-    // Simple CSV export
-    const table = document.getElementById('registrationsTable');
-    const rows = table.querySelectorAll('tr');
-    let csv = [];
-    
-    for (let i = 0; i < rows.length; i++) {
-        const row = [], cols = rows[i].querySelectorAll('td, th');
+    try {
+        const table = document.getElementById('registrationsTable');
+        if (!table) throw new Error("Table not found!");
+        let csv = [];
         
-        for (let j = 0; j < cols.length - 1; j++) { // Skip actions column
-            let data = cols[j].innerText.replace(/"/g, '""');
-            row.push('"' + data + '"');
+        const ths = table.querySelectorAll('thead tr th');
+        let header = [];
+        for (let i = 0; i < ths.length - 1; i++) {
+            header.push('"' + ths[i].innerText.replace(/"/g,'""') + '"');
         }
-        csv.push(row.join(','));
-    }
-    
-    const csvFile = new Blob([csv.join('\n')], { type: 'text/csv' });
-    const downloadLink = document.createElement('a');
-    downloadLink.download = '{{ event.title|replace(" ", "_") }}_registrations.csv';
-    downloadLink.href = window.URL.createObjectURL(csvFile);
-    downloadLink.style.display = 'none';
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
+        csv.push(header.join(','));
+
+        
+        const trs = table.querySelectorAll('tbody tr');
+        for (let tr of trs) {
+            const tds = tr.querySelectorAll('td');
+            let name = tds[0].querySelector('strong')?.innerText || "";
+            let email = tds[1].querySelector('a')?.innerText || "";
+            let org = tds[2].innerText || "";
+            let regDate = tds[3].querySelector('small')?.innerText || "";
+            csv.push(`"${name}","${email}","${org}","${regDate}"`);
+        }
+        const csvFile = new Blob([csv.join('\n')], { type: 'text/csv' });
+        const downloadLink = document.createElement('a');
+        downloadLink.download = '{{ event.title|replace(" ", "_") }}_registrations.csv';
+        downloadLink.href = window.URL.createObjectURL(csvFile);
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+    } catch(e) { alert("CSV export failed: " + e); }
 }
 
 function exportRegistrationsExcel() {
-    alert('Excel export functionality would be implemented here');
+    try {
+        if (typeof XLSX === 'undefined') throw new Error('SheetJS not loaded');
+        const table = document.getElementById('registrationsTable');
+        if (!table) throw new Error("Table not found!");
+        let ws_data = []; 
+        const ths = table.querySelectorAll('thead tr th');
+        let header = [];
+        for (let i = 0; i < ths.length - 1; i++) {
+            header.push(ths[i].innerText);
+        }
+        ws_data.push(header);
+
+        const trs = table.querySelectorAll('tbody tr');
+        for (let tr of trs) {
+            const tds = tr.querySelectorAll('td');
+            let name = tds[0].querySelector('strong')?.innerText || "";
+            let email = tds[1].querySelector('a')?.innerText || "";
+            let org = tds[2].innerText || "";
+            let regDate = tds[3].querySelector('small')?.innerText || "";
+            ws_data.push([name, email, org, regDate]);
+        }
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(ws_data);
+        XLSX.utils.book_append_sheet(wb, ws, "Registrations");
+        XLSX.writeFile(wb, "{{ event.title|replace(' ', '_') }}_registrations.xlsx");
+    } catch(e) { alert("Excel export failed: " + e.message); }
 }
 </script>
 {% endblock %}
