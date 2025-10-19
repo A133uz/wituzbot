@@ -21,6 +21,8 @@ class AdminSettings(BaseSettings):
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_HOURS: int
     
+    CORS_ALLOWED_ORIGINS: str = "*"
+    
     # @property
     # def DATABASE_URL_asyncpg(self):
     #     return f"postgresql+psycopg://{self.db_user}:{self.db_pass}@{self.db_host}:{self.db_port}/{self.db_name}"

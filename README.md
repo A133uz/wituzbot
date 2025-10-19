@@ -17,6 +17,8 @@ ADMIN_EMAIL=admin@example.com
 ADMIN_PASS=admin123
 ADMIN_IS_SUPERUSER=True
 ADMIN_IS_ACTIVE=True 
+
+CORS_ALLOWED_ORIGINS=your_origins
 ```
 
 ## env for bots:
