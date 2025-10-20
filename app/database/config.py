@@ -8,7 +8,7 @@ class DatabaseSettings(BaseSettings):
     DB_PASS: str
     DB_NAME: str
     REDIS_URL: str
-    TG_TOKEN: str
+    
     
     @property
     def DATABASE_URL_asyncpg(self):
@@ -27,4 +27,4 @@ class DatabaseSettings(BaseSettings):
         return "sqlite:///db.sqlite3"
     
         
-    model_config = SettingsConfigDict(env_file=".env.database", extra='ignore')
+    model_config = SettingsConfigDict(env_file="/app/.env.database", extra='ignore')

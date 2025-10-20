@@ -5,4 +5,4 @@ from pathlib import Path
 class MainBotSettings(BaseSettings):
     TG_TOKEN: str
         
-    model_config = SettingsConfigDict(env_file=".env.mainbot")
+    model_config = SettingsConfigDict(env_file="/app/.env.mainbot")

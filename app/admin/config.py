@@ -36,4 +36,4 @@ class AdminSettings(BaseSettings):
     #     return "sqlite:///db.sqlite3"
     
         
-    model_config = SettingsConfigDict(env_file=".env.admin")
+    model_config = SettingsConfigDict(env_file="/app/.env.admin")

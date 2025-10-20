@@ -53,7 +53,12 @@ templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
-app.add_middleware(CORSMiddleware, allow_origins=settings.CORS_ALLOWED_ORIGINS.split(","))
+app.add_middleware(CORSMiddleware, 
+                   allow_origins=settings.CORS_ALLOWED_ORIGINS.split(","),
+                   allow_credentials=True,
+                   allow_methods=["*"],
+                   allow_headers=["*"],
+                )
 
 security = HTTPBearer(auto_error=False)
 

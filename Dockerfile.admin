@@ -1,8 +1,8 @@
 FROM wituzbot-base:latest
 
+WORKDIR /app
 
 COPY app/admin ./app/admin
-COPY static ./static
 COPY templates ./templates
 
 COPY app/migrations ./app/migrations  
@@ -11,8 +11,10 @@ COPY alembic.ini .
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-COPY .env .env.database             
-COPY app/admin/.env .env.admin 
+COPY .env /app/.env.database             
+COPY app/admin/.env /app/.env.admin 
+COPY app/bot/.env /app/.env.mainbot
+
 
 
 
