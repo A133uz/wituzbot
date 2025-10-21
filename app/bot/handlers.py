@@ -85,6 +85,7 @@ async def process_input(msg: Message, state: FSMContext):
     field, question = ordered_fields[step]
     value = msg.text.strip()
     
+               
     try:
         if field == "name":
             value = validate_name_or_surname(value, "Name")
@@ -98,7 +99,6 @@ async def process_input(msg: Message, state: FSMContext):
         await msg.answer(f"{str(e)}\nPlease try again:")
         return
     
-    # Save validated value
     registration_data[field] = value
         
     
@@ -110,7 +110,7 @@ async def process_input(msg: Message, state: FSMContext):
         try:
             registration_data["telegram_id"] = msg.from_user.id         
             await set_user(registration_data)
-        except ValueError as e:
+        except Exception as e:
             await msg.answer(f"{str(e)}")
             return 
         except ValidationError as e:
