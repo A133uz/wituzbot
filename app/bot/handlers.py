@@ -54,6 +54,23 @@ async def process_input(msg: Message, state: FSMContext):
     field, question = ordered_fields[step]
     value = msg.text.strip()
     
+    test_data = registration_data.copy()
+    test_data[field] = value
+    
+    for req_field, _ in ordered_fields:
+        if req_field not in test_data:
+            if req_field in ("name", "surname", "org"):
+                test_data[req_field] = "Dummy"
+                
+    try:
+        UserBase(**test_data)
+    except ValidationError as e:
+        field_errors = [err for err in e.errors() if err["loc"][0] == field]
+        if field_errors:
+            err_msgs = "\n".join([f"{err['msg']}" for err in field_errors])
+            await msg.answer(f"{err_msgs}\nPlease try again:")
+            return
+    
     if field == "email":
         pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
         if not re.match(pattern, value):
@@ -61,11 +78,8 @@ async def process_input(msg: Message, state: FSMContext):
             return
         registration_data[field] = value
     else:
-        if value: 
-            registration_data[field] = value
-        else:
-            await msg.answer("Please enter a valid data.")
-            return
+        registration_data[field] = value
+        
     
     if step+1 < len(ordered_fields):
         _, next_question = ordered_fields[step+1]
