@@ -8,7 +8,7 @@ from aiogram.exceptions import TelegramBadRequest
 import asyncio
 import logging
 import re
-from pydantic import ValidationError
+from pydantic import ValidationError, EmailStr
 from ..database.schemas import UserBase
 
 
@@ -30,6 +30,37 @@ reg_fields = {
 }
 
 ordered_fields = list(reg_fields.items())
+
+def validate_name_or_surname(value: str, field_name: str) -> str:
+    """Validate name/surname fields"""
+    value = value.strip()
+    if not value or len(value) < 1:
+        raise ValueError(f'{field_name} cannot be empty')
+    if len(value) > 25:
+        raise ValueError(f'{field_name} cannot exceed 25 characters')
+    if not re.match(r'^[a-zA-Z\s\-\'\.]+$', value):
+        raise ValueError(f'{field_name} can only contain letters, spaces, hyphens, apostrophes, and periods')
+    return value
+
+def validate_org(value: str) -> str:
+    """Validate organization field"""
+    value = value.strip()
+    if not value or len(value) < 1:
+        raise ValueError('Organization cannot be empty')
+    if len(value) > 100:
+        raise ValueError('Organization cannot exceed 100 characters')
+    return value
+
+def validate_email(value: str) -> str:
+    """Validate email field"""
+    value = value.strip()
+    try:
+        EmailStr._validate(value)
+    except Exception:
+        raise ValueError('Please enter a valid email address')
+    if len(value) > 100:
+        raise ValueError('Email cannot exceed 100 characters')
+    return value
 
 class Registration(StatesGroup):
     awaiting_input = State()
@@ -54,31 +85,21 @@ async def process_input(msg: Message, state: FSMContext):
     field, question = ordered_fields[step]
     value = msg.text.strip()
     
-    test_data = registration_data.copy()
-    test_data[field] = value
-    
-    for req_field, _ in ordered_fields:
-        if req_field not in test_data:
-            if req_field in ("name", "surname", "org"):
-                test_data[req_field] = "Dummy"
-                
     try:
-        UserBase(**test_data)
-    except ValidationError as e:
-        field_errors = [err for err in e.errors() if err["loc"][0] == field]
-        if field_errors:
-            err_msgs = "\n".join([f"{err['msg']}" for err in field_errors])
-            await msg.answer(f"{err_msgs}\nPlease try again:")
-            return
+        if field == "name":
+            value = validate_name_or_surname(value, "Name")
+        elif field == "surname":
+            value = validate_name_or_surname(value, "Surname")
+        elif field == "email":
+            value = validate_email(value)
+        elif field == "org":
+            value = validate_org(value)
+    except ValueError as e:
+        await msg.answer(f"{str(e)}\nPlease try again:")
+        return
     
-    if field == "email":
-        pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        if not re.match(pattern, value):
-            await msg.answer("Please enter a valid email address (example: user@email.com).")
-            return
-        registration_data[field] = value
-    else:
-        registration_data[field] = value
+    # Save validated value
+    registration_data[field] = value
         
     
     if step+1 < len(ordered_fields):
@@ -92,6 +113,15 @@ async def process_input(msg: Message, state: FSMContext):
         except ValueError as e:
             await msg.answer(f"{str(e)}")
             return 
+        except ValidationError as e:
+            err_msgs = "\n".join([f"{err['loc'][0]}: {err['msg']}" for err in e.errors()])
+            await msg.answer(f"Some inputs are incorrect:\n{err_msgs}\nLet's try registration again.")
+            await state.clear()
+            await state.set_state(Registration.awaiting_input)
+            await state.update_data(step=0, registration_data={})
+            first_field, first_question = ordered_fields[0]
+            await msg.answer(first_question)
+            return
         
         await msg.answer("You have been successfully registered!", reply_markup=kb.menu)
         await state.clear()
