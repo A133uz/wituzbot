@@ -106,6 +106,7 @@ temp/
 .env.local
 .env.development
 .env.test
+env.example
 config/local.py
 local_settings.py
 
