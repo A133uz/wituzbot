@@ -58,9 +58,10 @@ async def process_input(msg: Message, state: FSMContext):
     test_data[field] = value
     
     for req_field, _ in ordered_fields:
-        if req_field not in test_data:
-            if req_field in ("name", "surname", "org"):
-                test_data[req_field] = "Dummy"
+        if req_field == "email":
+            test_data[req_field] = "dummy@example.com"  
+        elif req_field in ("name", "surname", "org"):
+            test_data[req_field] = "Dummy"
                 
     try:
         UserBase(**test_data)
@@ -71,14 +72,7 @@ async def process_input(msg: Message, state: FSMContext):
             await msg.answer(f"{err_msgs}\nPlease try again:")
             return
     
-    if field == "email":
-        pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        if not re.match(pattern, value):
-            await msg.answer("Please enter a valid email address (example: user@email.com).")
-            return
-        registration_data[field] = value
-    else:
-        registration_data[field] = value
+    registration_data[field] = value
         
     
     if step+1 < len(ordered_fields):
@@ -89,9 +83,18 @@ async def process_input(msg: Message, state: FSMContext):
         try:
             registration_data["telegram_id"] = msg.from_user.id         
             await set_user(registration_data)
-        except ValueError as e:
+        except Exception as e:
             await msg.answer(f"{str(e)}")
             return 
+        except ValidationError as e:
+            err_msgs = "\n".join([f"{err['loc'][0]}: {err['msg']}" for err in e.errors()])
+            await msg.answer(f"Some inputs are incorrect:\n{err_msgs}\nLet's try registration again.")
+            await state.clear()
+            await state.set_state(Registration.awaiting_input)
+            await state.update_data(step=0, registration_data={})
+            first_field, first_question = ordered_fields[0]
+            await msg.answer(first_question)
+            return
         
         await msg.answer("You have been successfully registered!", reply_markup=kb.menu)
         await state.clear()
