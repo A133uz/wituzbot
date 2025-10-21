@@ -7,6 +7,9 @@ from aiogram.exceptions import TelegramBadRequest
 
 import asyncio
 import logging
+import re
+from pydantic import ValidationError
+from ..database.schemas import UserBase
 
 
 from ..database.requests import (set_user, get_user, 
@@ -49,15 +52,28 @@ async def process_input(msg: Message, state: FSMContext):
     registration_data = data.get("registration_data", {})
     
     field, question = ordered_fields[step]
-    registration_data[field] = msg.text
+    value = msg.text.strip()
+    
+    if field == "email":
+        pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        if not re.match(pattern, value):
+            await msg.answer("Please enter a valid email address (example: user@email.com).")
+            return
+        registration_data[field] = value
+    else:
+        if value: 
+            registration_data[field] = value
+        else:
+            await msg.answer("Please enter a valid data.")
+            return
     
     if step+1 < len(ordered_fields):
-        next_field, next_question = ordered_fields[step+1]
+        _, next_question = ordered_fields[step+1]
         await state.update_data(step=step+1, registration_data=registration_data)
         await msg.answer(next_question)
     else:
         try:
-            registration_data["telegram_id"] = msg.from_user.id
+            registration_data["telegram_id"] = msg.from_user.id         
             await set_user(registration_data)
         except ValueError as e:
             await msg.answer(f"{str(e)}")
