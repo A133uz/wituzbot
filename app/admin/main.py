@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends, HTTPException, status, Response
+from fastapi import FastAPI, Request, Depends, HTTPException, status, Response, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -62,6 +62,7 @@ app.add_middleware(CORSMiddleware,
 
 security = HTTPBearer(auto_error=False)
 
+s3_service = S3Service()
 
 
 
@@ -274,7 +275,8 @@ async def create_event(
     request: Request,
     event_data: EventCreate = Depends(),
     db: AsyncSession = Depends(get_async_db),
-    organizer = Depends(get_current_organizer)
+    organizer = Depends(get_current_organizer),
+    image: UploadFile = File(None)
 ):
     try:
         event_datetime = datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")
@@ -289,14 +291,19 @@ async def create_event(
 
         utc_naive = event_datetime_utc.replace(tzinfo=None)
         logger.info(f"💾 Storing as naive UTC: {utc_naive}")
+        
+        image_url = None
+        if image and image.filename:
+            image_url = await s3_service.upload_image(image)
 
-        # Create new event
         new_event = Event(
             title=event_data.title,
             desc=event_data.desc,
             type=event_data.type,
             date_time=utc_naive,
             location=event_data.location,
+            image_url=image_url,
+            registration_question=event_data.registration_question,
             organizer_id=organizer.id
         )
 
@@ -329,13 +336,14 @@ async def create_event(
     
         return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     
-    except ValueError:
+    except Exception as e:
         form = await request.form()
         form_dict = dict(form)
+        logger.error(f"Create event error: {e}")
         return templates.TemplateResponse("create_event.html", {
             "request": request,
             "organizer": organizer,
-            "error": "Invalid date/time format",
+            "error": str(e),
             "form_data" : form_dict
         })
 
@@ -406,6 +414,8 @@ async def edit_event(
     event_id: int,
     event_data: EventUpdate = Depends(),
     db: AsyncSession = Depends(get_async_db),
+    image: UploadFile = File(None),
+    remove_image: bool = Form(False),
     organizer = Depends(get_current_organizer)
 ):
     try:
@@ -435,6 +445,17 @@ async def edit_event(
         event.type = event_data.type 
         event.date_time = utc_naive  # Store as UTC naive
         event.location = event_data.location
+        event.registration_question = event_data.registration_question
+        old_image_url = event.image_url
+        
+        if remove_image and old_image_url:
+            s3_service.delete_image(old_image_url)
+            event.image_url = None
+        elif image and image.filename:
+            if old_image_url:
+                s3_service.delete_image(old_image_url)
+            event.image_url = await s3_service.upload_image(image)
+            
         await db.commit()
         
         if datetime_changed:
@@ -481,12 +502,11 @@ async def delete_event(
                 sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
 
                 _cancel_reminder(sync_event, sync_db)
-                logger.info(f"🗑️ Cancelled reminder for event {event_id} before deletion")
-
-                
-            
+                logger.info(f"🗑️ Cancelled reminder for event {event_id} before deletion")        
     except Exception as e:
         logger.error(f"Failed to cancel reminder for event {event_id}: {e}") 
+        
+    s3_service.delete_image(event.image_url)
         
     await db.delete(event)
     await db.commit()

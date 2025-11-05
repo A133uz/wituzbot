@@ -22,7 +22,9 @@ class User(Base):
     __tablename__ = "users"
     
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    
     telegram_id = mapped_column(BigInteger, unique=True)
+    telegram_username: Mapped[str] = mapped_column(String, nullable=True)
     
     name: Mapped[str_25] 
     surname: Mapped[str_25]
@@ -55,6 +57,8 @@ class Event(Base):
     type: Mapped[EventTypeEnum] = mapped_column(String(25), nullable=False)
     date_time: Mapped[datetime] = mapped_column(DateTime())
     location: Mapped[str_100]
+    image_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    registration_question: Mapped[str] = mapped_column(String(255), nullable=True)
     
     celery_task_id = mapped_column(String(255), nullable=True)
     reminder_sent: Mapped[Boolean] = mapped_column(Boolean, default=False)
@@ -87,6 +91,7 @@ class Registration(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"), nullable=False)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP)
+    question_answer = mapped_column(Text(), nullable=True)
     
     #Relationships
     user: Mapped["User"] = relationship(back_populates="registrations")

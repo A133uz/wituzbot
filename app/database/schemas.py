@@ -20,6 +20,7 @@ class UserBase(BaseModel):
     surname: str = Field(..., min_length=1, max_length=25, description="User's surname")
     email: EmailStr = Field(..., max_length=100, description="User's email address")
     org: str = Field(..., min_length=1, max_length=100, description="User's organization/workplace")
+    telegram_username: Optional[str] = Field(None, description="Telegram username")
 
     @field_validator('name', 'surname', 'org')
     @classmethod
@@ -63,6 +64,7 @@ class UserUpdate(BaseModel):
     surname: Optional[str] = Field(None, min_length=1, max_length=25)
     email: Optional[EmailStr] = Field(None, max_length=100)
     org: Optional[str] = Field(None, min_length=1, max_length=100)
+    telegram_username: Optional[str] = Field(None, description="Telegram username")
 
     @field_validator('name', 'surname', 'org')
     @classmethod
@@ -203,6 +205,7 @@ class EventBase(BaseModel):
     desc: str = Field(..., min_length=10, description="Event description")
     type: EventTypeEnum = Field(..., description="Event type/category")
     location: str = Field(..., min_length=3, max_length=100, description="Event location")
+    
 
     @field_validator('title', 'desc', 'location')
     @classmethod
@@ -217,6 +220,7 @@ class EventCreate(EventBase):
     """Schema for creating an event via admin panel (form data)"""
     date: str = Field(..., pattern=r'^\d{4}-\d{2}-\d{2}$', description="Event date (YYYY-MM-DD)")
     time: str = Field(..., pattern=r'^\d{2}:\d{2}$', description="Event time (HH:MM in 24-hour format)")
+    registration_question: Optional[str] = Field(None, description="Optional registration question")
 
     @field_validator('date')
     @classmethod
@@ -247,6 +251,7 @@ class EventUpdate(EventBase):
     """Schema for updating an event"""
     date: str = Field(..., pattern=r'^\d{4}-\d{2}-\d{2}$')
     time: str = Field(..., pattern=r'^\d{2}:\d{2}$')
+    registration_question: Optional[str] = None
 
     @field_validator('date')
     @classmethod
@@ -276,6 +281,8 @@ class EventResponse(EventBase):
     organizer_id: int
     celery_task_id: Optional[str] = None
     reminder_sent: bool = False
+    image_url: Optional[str] = None
+    registration_question: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -302,6 +309,7 @@ class EventListResponse(BaseModel):
     location: str
     type: str
     registrations_count: int = 0
+    image_url: Optional[str] = None
 
     model_config = {"from_attributes": True}
     
@@ -316,6 +324,7 @@ class RegistrationBase(BaseModel):
 class RegistrationCreate(RegistrationBase):
     """Schema for creating a registration"""
     created_at: Optional[datetime] = Field(default_factory=datetime.now, description="Registration timestamp")
+    question_answer: Optional[str] = Field(None, description="Optional answer to custom registration question")
 
     @field_validator('user_id', 'event_id')
     @classmethod
@@ -330,6 +339,7 @@ class RegistrationResponse(RegistrationBase):
     """Schema for registration response"""
     id: int
     created_at: datetime
+    question_answer: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

@@ -1,16 +1,59 @@
 from typing import Optional
-import datetime, jwt
-from fastapi import Request
+import datetime, jwt, boto3
+from fastapi import Request, UploadFile, HTTPException
 from passlib.context import CryptContext
+from botocore.exceptions import ClientError
 from .config import AdminSettings
 
-import logging
+import logging, uuid
 
 settings = AdminSettings()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 logger = logging.getLogger(__name__)
+
+class S3Service:
+    def __init__(self):
+        self.bucket = settings.S3_BUCKET_NAME
+        self.s3 = boto3.client(
+            "s3",
+            region_name=settings.AWS_REGION,
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        )
+        
+    async def upload_image(self, file: UploadFile) -> str:
+        allowed_types = ["image/jpeg", "image/png", "image/webp"]
+        if file.content_type not in allowed_types:
+            raise HTTPException(status_code=415, detail="Unsupported file type.")
+        file_bytes = await file.read()
+        ext = file.filename.split('.')[-1]
+        filename = f"events/{uuid.uuid4()}.{ext}"
+        try:
+            self.s3.put_object(
+                Bucket=self.bucket,
+                Key=filename,
+                Body=file_bytes,
+                ContentType=file.content_type,
+                ACL="public-read"
+            )
+        except ClientError as e:
+            import traceback; 
+            traceback.print_exc()
+            logger.error(f"S3 upload error: {e} - Response: {getattr(e, 'response', None)}")
+            raise HTTPException(status_code=500, detail="Image upload failed:")
+        return f"https://{self.bucket}.s3.amazonaws.com/{filename}"
+    
+    def delete_image(self, image_url: str):
+        if not image_url:
+            return
+        try:
+            key = image_url.split(f"{self.bucket}.s3.amazonaws.com/")[-1]
+            self.s3.delete_object(Bucket=self.bucket, Key=key)
+        except Exception as e:
+            
+            print(f"Failed to delete image: {e}")
 
 
 # Password utilities
