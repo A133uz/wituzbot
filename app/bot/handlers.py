@@ -117,8 +117,8 @@ async def process_input(msg: Message, state: FSMContext):
         except Exception as e:
             await msg.answer(f"{str(e)}")
             return 
-        except ValidationError as e:
-            err_msgs = "\n".join([f"{err['loc'][0]}: {err['msg']}" for err in e.errors()])
+        except ValidationError as ve:
+            err_msgs = "\n".join([f"{err['loc'][0]}: {err['msg']}" for err in ve.errors()])
             await msg.answer(f"Some inputs are incorrect:\n{err_msgs}\nLet's try registration again.")
             await state.clear()
             await state.set_state(Registration.awaiting_input)
