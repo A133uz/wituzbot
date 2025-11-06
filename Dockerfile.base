@@ -1,0 +1,46 @@
+FROM python:3.12-slim AS builder
+
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+
+FROM python:3.12-slim
+
+
+RUN apt-get update && apt-get install -y \
+    libpq5 \
+    curl \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+
+COPY --from=builder /root/.local /root/.local
+
+COPY reminder_system.py ./
+
+
+COPY app/database ./app/database
+COPY app/utils ./app/utils
+COPY app/bot ./app/bot
+
+
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONPATH="/app"
+
+
+
+
+
+
+

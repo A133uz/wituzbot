@@ -2,6 +2,13 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 from typing import Optional, List
 from datetime import datetime
 from .enums import EventTypeEnum
+import sys
+from pathlib import Path
+
+
+app_dir = Path(__file__).parent.parent  
+sys.path.insert(0, str(app_dir))
+
 from utils.form_helpers import as_form
 import re
 
@@ -12,9 +19,11 @@ class UserBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=25, description="User's first name")
     surname: str = Field(..., min_length=1, max_length=25, description="User's surname")
     email: EmailStr = Field(..., max_length=100, description="User's email address")
-    org: str = Field(..., min_length=1, max_length=100, description="User's organization/workplace")
+    organization: str = Field(..., min_length=1, max_length=100, description="User's organization/workplace")
+    phone: str = Field(..., description="User's phone number in international format")
+    telegram_username: Optional[str] = Field(None, description="Telegram username")
 
-    @field_validator('name', 'surname', 'org')
+    @field_validator('name', 'surname', 'organization')
     @classmethod
     def strip_and_validate(cls, v: str) -> str:
         """Strip whitespace and validate not empty"""
@@ -33,6 +42,22 @@ class UserBase(BaseModel):
         if not re.match(r'^[a-zA-Z\s\-\'\.]+$', v):
             raise ValueError('Name can only contain letters, spaces, hyphens, apostrophes, and periods')
         return v
+    
+    @field_validator('phone')
+    @classmethod
+    def validate_phone_format(cls, v: str) -> str:
+        """Validate phone number format"""
+        import phonenumbers
+        from phonenumbers import NumberParseException
+        
+        v = v.strip()
+        try:
+            parsed = phonenumbers.parse(v, None)
+            if not phonenumbers.is_valid_number(parsed):
+                raise ValueError('Invalid phone number')
+            return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+        except NumberParseException:
+            raise ValueError('Phone number must be in international format')
 
 
 class UserCreate(UserBase):
@@ -55,9 +80,11 @@ class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=25)
     surname: Optional[str] = Field(None, min_length=1, max_length=25)
     email: Optional[EmailStr] = Field(None, max_length=100)
-    org: Optional[str] = Field(None, min_length=1, max_length=100)
+    phone: Optional[str] = Field(None, description="Phone number")
+    organization: Optional[str] = Field(None, min_length=1, max_length=100)
+    telegram_username: Optional[str] = Field(None, description="Telegram username")
 
-    @field_validator('name', 'surname', 'org')
+    @field_validator('name', 'surname', 'organization')
     @classmethod
     def strip_whitespace(cls, v: Optional[str]) -> Optional[str]:
         """Strip whitespace if value provided"""
@@ -67,6 +94,22 @@ class UserUpdate(BaseModel):
                 raise ValueError('Field cannot be empty if provided')
             return stripped
         return v
+    
+    @field_validator('phone')
+    @classmethod
+    def validate_phone_format(cls, v: str) -> str:
+        """Validate phone number format"""
+        import phonenumbers
+        from phonenumbers import NumberParseException
+        
+        v = v.strip()
+        try:
+            parsed = phonenumbers.parse(v, None)
+            if not phonenumbers.is_valid_number(parsed):
+                raise ValueError('Invalid phone number')
+            return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+        except NumberParseException:
+            raise ValueError('Phone number must be in international format')
 
 
 class UserResponse(UserBase):
@@ -196,6 +239,7 @@ class EventBase(BaseModel):
     desc: str = Field(..., min_length=10, description="Event description")
     type: EventTypeEnum = Field(..., description="Event type/category")
     location: str = Field(..., min_length=3, max_length=100, description="Event location")
+    
 
     @field_validator('title', 'desc', 'location')
     @classmethod
@@ -210,6 +254,7 @@ class EventCreate(EventBase):
     """Schema for creating an event via admin panel (form data)"""
     date: str = Field(..., pattern=r'^\d{4}-\d{2}-\d{2}$', description="Event date (YYYY-MM-DD)")
     time: str = Field(..., pattern=r'^\d{2}:\d{2}$', description="Event time (HH:MM in 24-hour format)")
+    registration_question: Optional[str] = Field(None, description="Optional registration question")
 
     @field_validator('date')
     @classmethod
@@ -240,6 +285,7 @@ class EventUpdate(EventBase):
     """Schema for updating an event"""
     date: str = Field(..., pattern=r'^\d{4}-\d{2}-\d{2}$')
     time: str = Field(..., pattern=r'^\d{2}:\d{2}$')
+    registration_question: Optional[str] = None
 
     @field_validator('date')
     @classmethod
@@ -269,6 +315,8 @@ class EventResponse(EventBase):
     organizer_id: int
     celery_task_id: Optional[str] = None
     reminder_sent: bool = False
+    image_url: Optional[str] = None
+    registration_question: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -295,6 +343,7 @@ class EventListResponse(BaseModel):
     location: str
     type: str
     registrations_count: int = 0
+    image_url: Optional[str] = None
 
     model_config = {"from_attributes": True}
     
@@ -309,6 +358,7 @@ class RegistrationBase(BaseModel):
 class RegistrationCreate(RegistrationBase):
     """Schema for creating a registration"""
     created_at: Optional[datetime] = Field(default_factory=datetime.now, description="Registration timestamp")
+    question_answer: Optional[str] = Field(None, description="Optional answer to custom registration question")
 
     @field_validator('user_id', 'event_id')
     @classmethod
@@ -323,6 +373,7 @@ class RegistrationResponse(RegistrationBase):
     """Schema for registration response"""
     id: int
     created_at: datetime
+    question_answer: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

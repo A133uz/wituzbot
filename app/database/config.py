@@ -1,31 +1,22 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import  EmailStr
+from pathlib import Path
 
-
-class Settings(BaseSettings):
-    tg_token: str
-    db_host: str
-    db_port: int
-    db_user: str
-    db_pass: str
-    db_name: str
-    redis_url: str
-    
-    secret_key: str
-    algorithm: str
-    access_token_expire_hours: int
-    
-    admin_name: str
-    admin_login: str
-    admin_email: EmailStr
-    admin_pass: str
-    admin_is_superuser: bool
-    admin_is_active: bool 
+class DatabaseSettings(BaseSettings):
+    DB_HOST: str
+    DB_PORT: int = 5432
+    DB_USER: str
+    DB_PASS: str
+    DB_NAME: str
+    REDIS_URL: str
     
     
     @property
     def DATABASE_URL_asyncpg(self):
-        return f"postgresql+psycopg://{self.db_user}:{self.db_pass}@{self.db_host}:{self.db_port}/{self.db_name}"
+        return f"postgresql+psycopg://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+    
+    @property
+    def DATABASE_URL_syncpg(self):
+        return f"postgresql+psycopg://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
     
     @property
     def DATABASE_URL_aiosqlite(self):
@@ -36,6 +27,4 @@ class Settings(BaseSettings):
         return "sqlite:///db.sqlite3"
     
         
-    model_config = SettingsConfigDict(env_file=".env")
-    
-settings = Settings()
+    model_config = SettingsConfigDict(env_file="/app/.env.database", extra='ignore')

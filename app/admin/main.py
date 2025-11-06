@@ -1,33 +1,46 @@
-from fastapi import FastAPI, Request, Depends, HTTPException, status, Response
+from fastapi import FastAPI, Request, Depends, HTTPException, status, Response, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 
 import pytz
 from starlette.middleware.sessions import SessionMiddleware
 
+from .utils import *
+
+import sys
+from pathlib import Path
+
+
+sys.path.append(str(Path(__file__).parent.parent)) 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload, Session
 
-from ..database.database import get_async_db, get_sync_db, get_sync_session
-from ..database.config import settings
-from ..database.models import Organizer, Event, Registration
-from ..database.schemas import EventCreate, EventUpdate, OrganizerCreate, OrganizerUpdate, LoginRequest
+from database.database import get_async_db, get_sync_db, get_sync_session
+from .config import AdminSettings
+from database.models import Organizer, Event, Registration, async_main
+from database.schemas import EventCreate, EventUpdate, OrganizerCreate, OrganizerUpdate, LoginRequest
+from .init_admin import create_initial_superuser
 
+
+sys.path.append(str(Path(__file__).parent.parent.parent)) 
 from reminder_system  import _auto_schedule_reminder, update_event_and_reschedule, _cancel_reminder
-
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import logging
+import uvicorn
+import asyncio
 
-from .utils import *
+
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+settings = AdminSettings()
 
 app = FastAPI(title="Event Admin Panel")
 
@@ -39,16 +52,23 @@ templates = Jinja2Templates(directory="templates")
 # Static files (for CSS/JS)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+app.add_middleware(CORSMiddleware, 
+                   allow_origins=settings.CORS_ALLOWED_ORIGINS.split(","),
+                   allow_credentials=True,
+                   allow_methods=["*"],
+                   allow_headers=["*"],
+                )
 
 security = HTTPBearer(auto_error=False)
 
+s3_service = S3Service()
 
 
 
 # Dependency to get current organizer
 def get_current_organizer(request: Request, db: Session = Depends(get_sync_db),
-                          creds: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Optional[Organizer]:
+                          creds: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Organizer:
     
     token = request.cookies.get("access_token")
     
@@ -56,19 +76,33 @@ def get_current_organizer(request: Request, db: Session = Depends(get_sync_db),
         token = creds.credentials
         
     if not token:
-        return
+        raise HTTPException(  
+            status_code=401,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     
     payload = verify_token(token)
     if not payload:
-        return
+        raise HTTPException(  
+            status_code=401,
+            detail="Invalid or expired token"
+        )
     
     organizer_id = payload.get("sub")
     if not organizer_id:
-        return
+        raise HTTPException(  
+            status_code=401,
+            detail="Invalid token payload"
+        )
     
-    organizer = db.query(Organizer).filter(Organizer.id == organizer_id).first()
+    organizer = db.query(Organizer).filter(Organizer.id == int(organizer_id)).first()
     if not organizer or not organizer.is_active:
-        return
+        raise HTTPException(  
+            status_code=401,
+            detail="Organizer not found"
+        )
     return organizer
     
 async def require_auth(organizer: Organizer = Depends(get_current_organizer)):
@@ -137,7 +171,7 @@ async def login(
         return RedirectResponse(url="/login", status_code=302)
     
     # Create access token
-    access_token_expires = timedelta(hours=settings.access_token_expire_hours if credentials.remember else 1)
+    access_token_expires = timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS if credentials.remember else 1)
     access_token = create_access_token(
         data={"sub": str(organizer.id)}, expires_delta=access_token_expires
     )
@@ -159,7 +193,7 @@ async def login(
 
 @app.post("/logout")
 async def logout(request: Request):
-    response = RedirectResponse(url="/login", status_code=302)
+    response = RedirectResponse(url="/", status_code=302)
     response.delete_cookie(key="access_token")
     flash_message(request, "You have been logged out successfully.", "success")
     return response
@@ -170,16 +204,16 @@ async def dashboard(
     db: AsyncSession = Depends(get_async_db),
     current_organizer = Depends(get_current_organizer)
 ):
-    # Replace with actual database queries
-    query = select(Event).where(Event.organizer_id == current_organizer.id).options(
+    
+    query = select(Event).options(
         selectinload(Event.registrations)
     )
     
     result = await db.execute(query)
     events = result.scalars().all()
     
-    # Calculate statistics in Python, not in template
-    now = datetime.datetime.now()
+    
+    now = datetime.now()
     total_events = len(events)
     upcoming_events = [e for e in events if e.date_time > now]
     upcoming_events_count = len(upcoming_events)
@@ -188,7 +222,7 @@ async def dashboard(
     total_registrations = sum(len(event.registrations) for event in events)
     
     # Calculate recent registrations (last 30 days)
-    thirty_days_ago = datetime.datetime.now() - timedelta(days=30)
+    thirty_days_ago = datetime.now() - timedelta(days=30)
     recent_registrations = 0
     for event in events:
         for reg in event.registrations:
@@ -241,10 +275,11 @@ async def create_event(
     request: Request,
     event_data: EventCreate = Depends(),
     db: AsyncSession = Depends(get_async_db),
-    organizer = Depends(get_current_organizer)
+    organizer = Depends(get_current_organizer),
+    image: UploadFile = File(None)
 ):
     try:
-        event_datetime = datetime.datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")
+        event_datetime = datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")
         logger.info(f"📝 Parsed input: {event_datetime}")
 
         tashkent_tz = pytz.timezone('Asia/Tashkent')
@@ -256,14 +291,19 @@ async def create_event(
 
         utc_naive = event_datetime_utc.replace(tzinfo=None)
         logger.info(f"💾 Storing as naive UTC: {utc_naive}")
+        
+        image_url = None
+        if image and image.filename:
+            image_url = await s3_service.upload_image(image)
 
-        # Create new event
         new_event = Event(
             title=event_data.title,
             desc=event_data.desc,
             type=event_data.type,
             date_time=utc_naive,
             location=event_data.location,
+            image_url=image_url,
+            registration_question=event_data.registration_question,
             organizer_id=organizer.id
         )
 
@@ -296,13 +336,14 @@ async def create_event(
     
         return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     
-    except ValueError:
+    except Exception as e:
         form = await request.form()
         form_dict = dict(form)
+        logger.error(f"Create event error: {e}")
         return templates.TemplateResponse("create_event.html", {
             "request": request,
             "organizer": organizer,
-            "error": "Invalid date/time format",
+            "error": str(e),
             "form_data" : form_dict
         })
 
@@ -313,10 +354,10 @@ async def event_detail(
     db: AsyncSession = Depends(get_async_db),
     organizer = Depends(get_current_organizer)
 ):
-    # Replace with actual database queries
+    
     
     res = await db.execute(select(Event)
-                           .filter(Event.id == event_id, Event.organizer_id == organizer.id)
+                           .filter(Event.id == event_id)
                            .options(
                                selectinload(Event.registrations).selectinload(Registration.user)
                            ))
@@ -324,40 +365,6 @@ async def event_detail(
     event = res.scalar_one_or_none()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    
-    
-    # Mock data - replace with real queries
-    #event = {
-    #    "id": event_id,
-    #    "title": "Tech Conference 2025",
-    #    "desc": "A comprehensive tech conference covering latest trends",
-    #    "date_time": datetime(2025, 8, 15, 10, 0),
-    #    "location": "Tech Center",
-    #    "type": "conference"
-    #}
-    #
-    #registrations = [
-    #    {
-    #        "id": 1,
-    #        "user": {
-    #            "name": "John",
-    #            "surname": "Doe",
-    #            "email": "john@example.com",
-    #            "org": "Tech Corp"
-    #        },
-    #        "created_at": datetime(2025, 7, 20, 15, 30)
-    #    },
-    #    {
-    #        "id": 2,
-    #        "user": {
-    #            "name": "Jane",
-    #            "surname": "Smith",
-    #            "email": "jane@example.com",
-    #            "org": "Innovation Ltd"
-    #        },
-    #        "created_at": datetime(2025, 7, 21, 9, 15)
-    #    }
-    #]
     
     return templates.TemplateResponse("event_detail.html", {
         "request": request,
@@ -376,7 +383,7 @@ async def edit_event_form(
 ):
     # Replace with actual database query
     
-    res = await db.execute(select(Event).filter(Event.id == event_id, Event.organizer_id == organizer.id))
+    res = await db.execute(select(Event).filter(Event.id == event_id))
 
     event = res.scalar_one_or_none()
     
@@ -407,11 +414,13 @@ async def edit_event(
     event_id: int,
     event_data: EventUpdate = Depends(),
     db: AsyncSession = Depends(get_async_db),
+    image: UploadFile = File(None),
+    remove_image: bool = Form(False),
     organizer = Depends(get_current_organizer)
 ):
     try:
         # Parse input
-        event_datetime_naive = datetime.datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")
+        event_datetime_naive = datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")
         
         # Convert Tashkent → UTC (same as create endpoint)
         tashkent_tz = pytz.timezone('Asia/Tashkent')
@@ -422,7 +431,7 @@ async def edit_event(
         logger.info(f"Editing event {event_id}: {event_datetime_tashkent} → {utc_naive} UTC")
         
         # Get event
-        res = await db.execute(select(Event).filter(Event.id == event_id, Event.organizer_id == organizer.id))
+        res = await db.execute(select(Event).filter(Event.id == event_id))
         event = res.scalar_one_or_none()
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
@@ -436,6 +445,17 @@ async def edit_event(
         event.type = event_data.type 
         event.date_time = utc_naive  # Store as UTC naive
         event.location = event_data.location
+        event.registration_question = event_data.registration_question
+        old_image_url = event.image_url
+        
+        if remove_image and old_image_url:
+            s3_service.delete_image(old_image_url)
+            event.image_url = None
+        elif image and image.filename:
+            if old_image_url:
+                s3_service.delete_image(old_image_url)
+            event.image_url = await s3_service.upload_image(image)
+            
         await db.commit()
         
         if datetime_changed:
@@ -468,28 +488,25 @@ async def delete_event(
 ):
     
     # Delete event - replace with actual database operation
-    res = await db.execute(select(Event).filter(Event.id == event_id, Event.organizer_id == organizer.id))
+    res = await db.execute(select(Event).filter(Event.id == event_id))
     
     event = res.scalar_one_or_none()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
     try:
-        if event.celery_task_id:  # Only if there's a scheduled reminder
+        if event.celery_task_id:  
             with get_sync_session() as sync_db:
                 
                 
-                # Get event in sync session
                 sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
 
-                # Cancel reminder task
                 _cancel_reminder(sync_event, sync_db)
-                logger.info(f"🗑️ Cancelled reminder for event {event_id} before deletion")
-
-                
-            
+                logger.info(f"🗑️ Cancelled reminder for event {event_id} before deletion")        
     except Exception as e:
         logger.error(f"Failed to cancel reminder for event {event_id}: {e}") 
+        
+    s3_service.delete_image(event.image_url)
         
     await db.delete(event)
     await db.commit()
@@ -713,5 +730,16 @@ async def delete_admin(
     
 
 
+async def main():
+    await async_main()
+    await create_initial_superuser()
+    config = uvicorn.Config("app.admin.main:app", host="0.0.0.0", port=8000, reload=True)
+    server = uvicorn.Server(config)
+    await server.serve()
     
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Admin panel has been stopped")
 

@@ -1,12 +1,14 @@
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncSession, AsyncAttrs
-from .config import settings
+from .config import DatabaseSettings
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 from sqlalchemy import String, create_engine
 from typing import Annotated
 from contextlib import asynccontextmanager, contextmanager
 
-as_engine = create_async_engine(url=settings.DATABASE_URL_aiosqlite, echo=True)
-s_engine = create_engine(url=settings.DATABASE_URL_sqlite, echo=True)
+settings = DatabaseSettings()
+
+as_engine = create_async_engine(url=settings.DATABASE_URL_asyncpg, echo=True) #TODO: have to change to pg for prod
+s_engine = create_engine(url=settings.DATABASE_URL_syncpg, echo=True)
 
 async_session = async_sessionmaker(as_engine, class_=AsyncSession, expire_on_commit=False)
 sync_session = sessionmaker(s_engine, class_=Session, expire_on_commit=False)
@@ -51,3 +53,5 @@ def get_sync_session():
 async def get_session():
     async with async_session() as session:
         yield session
+        
+

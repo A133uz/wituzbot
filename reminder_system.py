@@ -5,16 +5,20 @@ import asyncio
 import logging
 from sqlalchemy.orm import Session
 
-from app.database.config import settings
+from app.database.config import DatabaseSettings
+from app.bot.config import MainBotSettings
 from app.database.database import get_sync_session
 from app.database.models import Event
 
 logger = logging.getLogger(__name__)
 
+settings = DatabaseSettings()
+bot_settings = MainBotSettings()
+
 celery_app = Celery(
     "reminder_system",
-    broker=settings.redis_url,
-    backend=settings.redis_url
+    broker=settings.REDIS_URL,
+    backend=settings.REDIS_URL
 )
 
 celery_app.conf.update(
@@ -163,7 +167,7 @@ async def send_telegram_reminder(event: Event):
     """Send reminder message via Telegram"""
     try:
         from aiogram import Bot
-        bot = Bot(token=settings.tg_token)
+        bot = Bot(token=bot_settings.TG_TOKEN)
         
         
         # Format reminder message

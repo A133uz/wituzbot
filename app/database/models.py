@@ -22,12 +22,15 @@ class User(Base):
     __tablename__ = "users"
     
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    telegram_id = mapped_column(BigInteger)
+    
+    telegram_id = mapped_column(BigInteger, unique=True)
+    telegram_username: Mapped[str] = mapped_column(String, nullable=True)
     
     name: Mapped[str_25] 
     surname: Mapped[str_25]
     email: Mapped[str_100] = mapped_column(nullable=False)
-    org: Mapped[str_100] 
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    organization: Mapped[str_100] 
     
     registrations: Mapped[List["Registration"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     
@@ -55,6 +58,8 @@ class Event(Base):
     type: Mapped[EventTypeEnum] = mapped_column(String(25), nullable=False)
     date_time: Mapped[datetime] = mapped_column(DateTime())
     location: Mapped[str_100]
+    image_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    registration_question: Mapped[str] = mapped_column(String(255), nullable=True)
     
     celery_task_id = mapped_column(String(255), nullable=True)
     reminder_sent: Mapped[Boolean] = mapped_column(Boolean, default=False)
@@ -87,6 +92,7 @@ class Registration(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"), nullable=False)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP)
+    question_answer = mapped_column(Text(), nullable=True)
     
     #Relationships
     user: Mapped["User"] = relationship(back_populates="registrations")
@@ -97,7 +103,7 @@ class Registration(Base):
         Index('idx_event_id', 'event_id'),
         Index('idx_user_id', 'user_id'),
     )
-    
+        
 async def async_main():
     async with as_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)   

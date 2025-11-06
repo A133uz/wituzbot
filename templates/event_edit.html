@@ -64,7 +64,7 @@
     <div class="col-lg-8">
         <div class="card">
             <div class="card-body">
-                <form method="post" action="/events/{{ event.id }}/edit" id="editEventForm" novalidate>
+                <form method="post" action="/events/{{ event.id }}/edit" id="editEventForm" novalidate enctype="multipart/form-data">
                     <div class="mb-3">
                         <label for="title" class="form-label">
                             Event Title <span class="text-danger">*</span>
@@ -85,6 +85,20 @@
                         <div class="invalid-feedback">
                             Please enter a detailed description (minimum 10 characters).
                         </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="registration_question" class="form-label">
+                            Registration Question (optional)
+                        </label>
+                        <input type="text"
+                               class="form-control"
+                               id="registration_question"
+                               name="registration_question"
+                               value="{{ event.registration_question if event and event.registration_question else '' }}"
+                               maxlength="255"
+                               placeholder="e.g. Why do you want to attend?">
+                        <div class="form-text">This question will be asked to users during registration. Leave blank if not needed.</div>
                     </div>
                     
                     <div class="row">
@@ -144,6 +158,26 @@
                         </div>
                     </div>
                     
+                    <div class="mb-3">
+                        <label for="image" class="form-label">
+                            Event Image (optional)
+                        </label>
+                        <input type="file"
+                               class="form-control"
+                               id="image"
+                               name="image"
+                               accept="image/png,image/jpeg,image/webp">
+                        {% if event and event.image_url %}
+                            <div class="mt-2">
+                                <img src="{{ event.image_url }}" alt="Event Image" style="max-width: 100%; max-height: 150px;">
+                                <br>
+                                <input type="checkbox" id="remove_image" name="remove_image">
+                                <label for="remove_image">Remove current image</label>
+                            </div>
+                        {% endif %}
+                        <div class="form-text">Upload, replace, or remove existing image.</div>
+                    </div>
+
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
                         <a href="/events/{{ event.id }}" class="btn btn-outline-secondary me-md-2">Cancel</a>
                         <button type="submit" class="btn btn-primary">

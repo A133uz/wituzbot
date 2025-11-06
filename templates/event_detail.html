@@ -20,6 +20,29 @@
     </div>
 </div>
 
+{% if event.image_url %}
+<div class="mb-4 d-flex justify-content-center">
+  <div class="card shadow-sm" style="max-width:350px;">
+    <img src="{{ event.image_url }}" class="card-img-top img-fluid rounded"
+         alt="Event Image" style="max-height:250px; object-fit:cover;">
+  </div>
+</div>
+{% endif %}
+{% if event.registration_question %}
+<div class="card border-info mb-4 mx-auto" style="max-width:450px;">
+  <div class="card-header bg-info text-white d-flex align-items-center">
+    <i class="fas fa-question-circle fa-lg me-2"></i>
+    <span>Registration Question</span>
+  </div>
+  <div class="card-body">
+    <p class="mb-0" style="font-size:1.1rem;">
+      <strong>{{ event.registration_question }}</strong>
+    </p>
+    <small class="text-muted">This question is asked to users during Telegram registration.</small>
+  </div>
+</div>
+{% endif %}
+
 <!-- Event Details -->
 <div class="row mb-4">
     <div class="col-lg-8">
@@ -89,9 +112,14 @@
                     <tr>
                         <th>Name</th>
                         <th>Email</th>
+                        <th>Phone Number</th>
                         <th>Organization</th>
+                        <th>Telegram Username</th>
+                        {% if event.registration_question %}
+                        <th>Answer</th>
+                        {% endif %}
                         <th>Registration Date</th>
-                        <th>Actions</th>
+                        
                     </tr>
                 </thead>
                 <tbody>
@@ -113,20 +141,18 @@
                                 {{ registration.user.email }}
                             </a>
                         </td>
-                        <td>{{ registration.user.org }}</td>
+                        <td>{{ registration.user.phone }}</td>
+                        <td>{{ registration.user.organization }}</td>
+                        <td>{{ registration.user.telegram_username }}</td>
+                        {% if event.registration_question %}
+                        <td>{{ registration.question_answer if registration.question_answer else "—" }}</td>
+                        {% endif %}
                         <td>
                             <small class="text-muted">
                                 {{ registration.created_at.strftime('%Y-%m-%d %H:%M') }}
                             </small>
                         </td>
-                        <td>
-                            <div class="btn-group btn-group-sm">
-                                <button type="button" class="btn btn-outline-primary" title="Send Email" 
-                                        onclick="sendEmail('{{ registration.user.email }}')">
-                                    <i class="fas fa-envelope"></i>
-                                </button>
-                            </div>
-                        </td>
+                        
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -146,33 +172,85 @@
 {% block scripts %}
 <script>
 function exportRegistrations() {
-    // Simple CSV export
-    const table = document.getElementById('registrationsTable');
-    const rows = table.querySelectorAll('tr');
-    let csv = [];
-    
-    for (let i = 0; i < rows.length; i++) {
-        const row = [], cols = rows[i].querySelectorAll('td, th');
+    try {
+        const table = document.getElementById('registrationsTable');
+        if (!table) throw new Error("Table not found!");
+        let csv = [];
         
-        for (let j = 0; j < cols.length - 1; j++) { // Skip actions column
-            let data = cols[j].innerText.replace(/"/g, '""');
-            row.push('"' + data + '"');
+        const ths = table.querySelectorAll('thead tr th');
+        let header = [];
+        for (let i = 0; i < ths.length; i++) {
+            header.push('"' + ths[i].innerText.replace(/"/g,'""') + '"');
         }
-        csv.push(row.join(','));
+        csv.push(header.join(','));
+
+        const trs = table.querySelectorAll('tbody tr');
+        for (let tr of trs) {
+            const tds = tr.querySelectorAll('td');
+            let row = [];
+            for (let i = 0; i < tds.length; i++) {
+                if (i === 0) {
+                    row.push('"' + (tds[i].querySelector('strong')?.innerText || tds[i].innerText.trim()).replace(/"/g,'""') + '"');
+                } else if (tds[i].querySelector('a')) {
+                    row.push('"' + tds[i].querySelector('a').innerText.replace(/"/g,'""') + '"');
+                } else if (tds[i].querySelector('small')) {
+                    row.push('"' + tds[i].querySelector('small').innerText.replace(/"/g,'""') + '"');
+                } else {
+                    row.push('"' + tds[i].innerText.trim().replace(/"/g,'""') + '"');
+                }
+            }
+            csv.push(row.join(','));
+        }
+        const csvFile = new Blob([csv.join('\n')], { type: 'text/csv' });
+        const downloadLink = document.createElement('a');
+        downloadLink.download = '{{ event.title|replace(" ", "_") }}_registrations.csv';
+        downloadLink.href = window.URL.createObjectURL(csvFile);
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+    } catch(e) {
+        alert("CSV export failed: " + e);
     }
-    
-    const csvFile = new Blob([csv.join('\n')], { type: 'text/csv' });
-    const downloadLink = document.createElement('a');
-    downloadLink.download = '{{ event.title|replace(" ", "_") }}_registrations.csv';
-    downloadLink.href = window.URL.createObjectURL(csvFile);
-    downloadLink.style.display = 'none';
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
 }
 
 function exportRegistrationsExcel() {
-    alert('Excel export functionality would be implemented here');
+    try {
+        if (typeof XLSX === 'undefined') throw new Error('SheetJS not loaded');
+        const table = document.getElementById('registrationsTable');
+        if (!table) throw new Error("Table not found!");
+
+        let ws_data = [];
+        const ths = table.querySelectorAll('thead tr th');
+        let header = [];
+        for (let i = 0; i < ths.length; i++) {
+            header.push(ths[i].innerText.trim());
+        }
+        ws_data.push(header);
+
+        const trs = table.querySelectorAll('tbody tr');
+        for (let tr of trs) {
+            const tds = tr.querySelectorAll('td');
+            let row = [];
+            for (let i = 0; i < tds.length; i++) { 
+                if (i === 0) {
+                    row.push(tds[i].querySelector('strong')?.innerText || tds[i].innerText.trim());
+                } else if (tds[i].querySelector('a')) {
+                    row.push(tds[i].querySelector('a').innerText || tds[i].innerText.trim());
+                } else if (tds[i].querySelector('small')) {
+                    row.push(tds[i].querySelector('small').innerText || tds[i].innerText.trim());
+                } else {
+                    row.push(tds[i].innerText.trim());
+                }
+            }
+            ws_data.push(row);
+        }
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(ws_data);
+        XLSX.utils.book_append_sheet(wb, ws, "Registrations");
+        XLSX.writeFile(wb, "{{ event.title|replace(' ', '_') }}_registrations.xlsx");
+    } catch(e) {
+        alert("Excel export failed: " + e.message);
+    }
 }
 </script>
 {% endblock %}
