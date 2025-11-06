@@ -193,7 +193,7 @@ async def login(
 
 @app.post("/logout")
 async def logout(request: Request):
-    response = RedirectResponse(url="/login", status_code=302)
+    response = RedirectResponse(url="/", status_code=302)
     response.delete_cookie(key="access_token")
     flash_message(request, "You have been logged out successfully.", "success")
     return response

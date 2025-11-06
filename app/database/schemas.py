@@ -20,11 +20,11 @@ class UserBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=25, description="User's first name")
     surname: str = Field(..., min_length=1, max_length=25, description="User's surname")
     email: EmailStr = Field(..., max_length=100, description="User's email address")
-    org: str = Field(..., min_length=1, max_length=100, description="User's organization/workplace")
+    organization: str = Field(..., min_length=1, max_length=100, description="User's organization/workplace")
     phone: PhoneNumber = Field(..., description="User's phone number in international format")
     telegram_username: Optional[str] = Field(None, description="Telegram username")
 
-    @field_validator('name', 'surname', 'org')
+    @field_validator('name', 'surname', 'organization')
     @classmethod
     def strip_and_validate(cls, v: str) -> str:
         """Strip whitespace and validate not empty"""
@@ -66,10 +66,10 @@ class UserUpdate(BaseModel):
     surname: Optional[str] = Field(None, min_length=1, max_length=25)
     email: Optional[EmailStr] = Field(None, max_length=100)
     phone: Optional[PhoneNumber] = Field(None, description="Phone number")
-    org: Optional[str] = Field(None, min_length=1, max_length=100)
+    organization: Optional[str] = Field(None, min_length=1, max_length=100)
     telegram_username: Optional[str] = Field(None, description="Telegram username")
 
-    @field_validator('name', 'surname', 'org')
+    @field_validator('name', 'surname', 'organization')
     @classmethod
     def strip_whitespace(cls, v: Optional[str]) -> Optional[str]:
         """Strip whitespace if value provided"""

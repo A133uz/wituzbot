@@ -69,7 +69,7 @@ def validate_phone(value: str) -> str:
     value = value.strip()
     try:
         validated = PhoneNumber(value)
-        return str(validated)  
+        return str(validated).replace("tel:", "")
     except ValidationError:
         raise ValueError('❌ Phone number must be in international format (e.g., +998901234567)')
 
@@ -97,7 +97,6 @@ async def process_input(msg: Message, state: FSMContext):
     registration_data = data.get("registration_data", {})
     
     field, question = ordered_fields[step]
-    value = msg.text.strip()
     
     if field == "phone":
         if msg.contact:
@@ -237,7 +236,7 @@ async def get_users_profile(msg: Message):
         user_profile = (
             f"Name: {user.name}\n"
             f"Surname: {user.surname}\n"
-            f"Occupation: {user.org}\n"
+            f"Occupation: {user.organization}\n"
         )
         await msg.answer(
             text=user_profile
