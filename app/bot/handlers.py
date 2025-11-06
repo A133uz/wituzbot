@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
@@ -9,6 +9,7 @@ import asyncio
 import logging
 import re
 from pydantic import ValidationError, EmailStr
+from pydantic_extra_types.phone_numbers import PhoneNumber
 from ..database.schemas import UserBase
 
 
@@ -23,10 +24,11 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 reg_fields = {
-    "name" : "what's your name?",
-    "surname" : "what's your surname?",
-    "email" : "what's your email?",
-    "org" : "where do you work/study?"
+    "name" : "What's your name?",
+    "surname" : "What's your surname?",
+    "email" : "What's your email?",
+    "phone" : "📱 Please share your phone number using the button below, or type it manually (e.g., +998901234567):",
+    "org" : "Where do you work/study?"
 }
 
 ordered_fields = list(reg_fields.items())
@@ -62,6 +64,15 @@ def validate_email(value: str) -> str:
         raise ValueError('Email cannot exceed 100 characters')
     return value
 
+def validate_phone(value: str) -> str:
+    """Validate phone number using Pydantic PhoneNumber type"""
+    value = value.strip()
+    try:
+        validated = PhoneNumber(value)
+        return str(validated)  
+    except ValidationError:
+        raise ValueError('❌ Phone number must be in international format (e.g., +998901234567)')
+
 class Registration(StatesGroup):
     awaiting_input = State()
     
@@ -88,6 +99,7 @@ async def process_input(msg: Message, state: FSMContext):
     field, question = ordered_fields[step]
     value = msg.text.strip()
     
+    
                
     try:
         if field == "name":
@@ -96,6 +108,13 @@ async def process_input(msg: Message, state: FSMContext):
             value = validate_name_or_surname(value, "Surname")
         elif field == "email":
             value = validate_email(value)
+        elif field == "phone":
+            if msg.contact:
+                value = msg.contact.phone_number
+            elif not value:
+                await msg.answer("❌ Please share your contact or type your phone number.")
+                return
+            value = validate_phone(value)
         elif field == "org":
             value = validate_org(value)
     except ValueError as e:
@@ -106,9 +125,13 @@ async def process_input(msg: Message, state: FSMContext):
         
     
     if step+1 < len(ordered_fields):
-        _, next_question = ordered_fields[step+1]
+        next_field, next_question = ordered_fields[step+1]
         await state.update_data(step=step+1, registration_data=registration_data)
-        await msg.answer(next_question)
+        
+        if next_field == "phone":
+            await msg.answer(next_question, reply_markup=kb.contact_request_kb())
+        else:
+            await msg.answer(next_question, reply_markup=ReplyKeyboardRemove())
     else:
         try:
             registration_data["telegram_id"] = msg.from_user.id 

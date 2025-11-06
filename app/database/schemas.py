@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic_extra_types.phone_numbers import PhoneNumber
 from typing import Optional, List
 from datetime import datetime
 from .enums import EventTypeEnum
@@ -20,6 +21,7 @@ class UserBase(BaseModel):
     surname: str = Field(..., min_length=1, max_length=25, description="User's surname")
     email: EmailStr = Field(..., max_length=100, description="User's email address")
     org: str = Field(..., min_length=1, max_length=100, description="User's organization/workplace")
+    phone: PhoneNumber = Field(..., description="User's phone number in international format")
     telegram_username: Optional[str] = Field(None, description="Telegram username")
 
     @field_validator('name', 'surname', 'org')
@@ -63,6 +65,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=25)
     surname: Optional[str] = Field(None, min_length=1, max_length=25)
     email: Optional[EmailStr] = Field(None, max_length=100)
+    phone: Optional[PhoneNumber] = Field(None, description="Phone number")
     org: Optional[str] = Field(None, min_length=1, max_length=100)
     telegram_username: Optional[str] = Field(None, description="Telegram username")
 

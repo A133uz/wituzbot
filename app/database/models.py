@@ -29,6 +29,7 @@ class User(Base):
     name: Mapped[str_25] 
     surname: Mapped[str_25]
     email: Mapped[str_100] = mapped_column(nullable=False)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
     org: Mapped[str_100] 
     
     registrations: Mapped[List["Registration"]] = relationship(back_populates="user", cascade="all, delete-orphan")
