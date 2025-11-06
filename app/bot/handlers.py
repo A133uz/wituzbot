@@ -28,7 +28,7 @@ reg_fields = {
     "surname" : "What's your surname?",
     "email" : "What's your email?",
     "phone" : "📱 Please share your phone number using the button below, or type it manually (e.g., +998901234567):",
-    "org" : "Where do you work/study?"
+    "organization" : "Where do you work/study?"
 }
 
 ordered_fields = list(reg_fields.items())
@@ -99,24 +99,35 @@ async def process_input(msg: Message, state: FSMContext):
     field, question = ordered_fields[step]
     value = msg.text.strip()
     
+    if field == "phone":
+        if msg.contact:
+            value = msg.contact.phone_number
+        elif msg.text:
+            value = msg.text.strip()
+        else:
+            await msg.answer("❌ Please share your contact or type your phone number.")
+            return
+    else:
+        if not msg.text:
+            await msg.answer(f"❌ Please enter your {field}.")
+            return
+        value = msg.text.strip()
+        
     
                
     try:
-        if field == "name":
-            value = validate_name_or_surname(value, "Name")
-        elif field == "surname":
-            value = validate_name_or_surname(value, "Surname")
-        elif field == "email":
-            value = validate_email(value)
-        elif field == "phone":
-            if msg.contact:
-                value = msg.contact.phone_number
-            elif not value:
-                await msg.answer("❌ Please share your contact or type your phone number.")
-                return
-            value = validate_phone(value)
-        elif field == "org":
-            value = validate_org(value)
+        validators = {
+            "name": lambda v: validate_name_or_surname(v, "Name"),
+            "surname": lambda v: validate_name_or_surname(v, "Surname"),
+            "email": validate_email,
+            "phone": validate_phone,
+            "organization": validate_org
+        }
+        
+        if field in validators:
+            value = validators[field](value)
+            
+            
     except ValueError as e:
         await msg.answer(f"{str(e)}\nPlease try again:")
         return
