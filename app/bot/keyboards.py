@@ -25,9 +25,9 @@ async def create_skip_button() -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 def contact_request_kb():
-    kb = ReplyKeyboardMarkup(keyboard=[KeyboardButton("📱 Share my phone number", request_contact=True)],
-                             resize_keyboard=True, one_time_keyboard=True)
-    return kb
+    kb = ReplyKeyboardBuilder()
+    kb.add(KeyboardButton(text="📱 Share my phone number", request_contact=True))
+    return kb.as_markup(resize_keyboard=True, one_time_keyboard=True)
 
 async def create_registered_button(event_id: int):
     kb = InlineKeyboardBuilder()
