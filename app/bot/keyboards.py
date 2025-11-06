@@ -1,6 +1,6 @@
 from aiogram.types import (KeyboardButton, InlineKeyboardButton, 
                            InlineKeyboardMarkup, ReplyKeyboardMarkup)
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from ..database.requests import check_user_registration 
 
 
@@ -25,8 +25,8 @@ async def create_skip_button() -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 def contact_request_kb():
-    kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    kb.add(KeyboardButton("📱 Share my phone number", request_contact=True))
+    kb = ReplyKeyboardMarkup(keyboard=[KeyboardButton("📱 Share my phone number", request_contact=True)],
+                             resize_keyboard=True, one_time_keyboard=True)
     return kb
 
 async def create_registered_button(event_id: int):
