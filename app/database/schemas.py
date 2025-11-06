@@ -1,5 +1,4 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
-from pydantic_extra_types.phone_numbers import PhoneNumber
 from typing import Optional, List
 from datetime import datetime
 from .enums import EventTypeEnum
@@ -7,7 +6,7 @@ import sys
 from pathlib import Path
 
 
-app_dir = Path(__file__).parent.parent  # Goes from database/ up to app/
+app_dir = Path(__file__).parent.parent  
 sys.path.insert(0, str(app_dir))
 
 from utils.form_helpers import as_form
@@ -21,7 +20,7 @@ class UserBase(BaseModel):
     surname: str = Field(..., min_length=1, max_length=25, description="User's surname")
     email: EmailStr = Field(..., max_length=100, description="User's email address")
     organization: str = Field(..., min_length=1, max_length=100, description="User's organization/workplace")
-    phone: PhoneNumber = Field(..., description="User's phone number in international format")
+    phone: str = Field(..., description="User's phone number in international format")
     telegram_username: Optional[str] = Field(None, description="Telegram username")
 
     @field_validator('name', 'surname', 'organization')
@@ -43,6 +42,22 @@ class UserBase(BaseModel):
         if not re.match(r'^[a-zA-Z\s\-\'\.]+$', v):
             raise ValueError('Name can only contain letters, spaces, hyphens, apostrophes, and periods')
         return v
+    
+    @field_validator('phone')
+    @classmethod
+    def validate_phone_format(cls, v: str) -> str:
+        """Validate phone number format"""
+        import phonenumbers
+        from phonenumbers import NumberParseException
+        
+        v = v.strip()
+        try:
+            parsed = phonenumbers.parse(v, None)
+            if not phonenumbers.is_valid_number(parsed):
+                raise ValueError('Invalid phone number')
+            return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+        except NumberParseException:
+            raise ValueError('Phone number must be in international format')
 
 
 class UserCreate(UserBase):
@@ -65,7 +80,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=25)
     surname: Optional[str] = Field(None, min_length=1, max_length=25)
     email: Optional[EmailStr] = Field(None, max_length=100)
-    phone: Optional[PhoneNumber] = Field(None, description="Phone number")
+    phone: Optional[str] = Field(None, description="Phone number")
     organization: Optional[str] = Field(None, min_length=1, max_length=100)
     telegram_username: Optional[str] = Field(None, description="Telegram username")
 
@@ -79,6 +94,22 @@ class UserUpdate(BaseModel):
                 raise ValueError('Field cannot be empty if provided')
             return stripped
         return v
+    
+    @field_validator('phone')
+    @classmethod
+    def validate_phone_format(cls, v: str) -> str:
+        """Validate phone number format"""
+        import phonenumbers
+        from phonenumbers import NumberParseException
+        
+        v = v.strip()
+        try:
+            parsed = phonenumbers.parse(v, None)
+            if not phonenumbers.is_valid_number(parsed):
+                raise ValueError('Invalid phone number')
+            return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+        except NumberParseException:
+            raise ValueError('Phone number must be in international format')
 
 
 class UserResponse(UserBase):

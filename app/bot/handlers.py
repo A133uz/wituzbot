@@ -10,6 +10,8 @@ import logging
 import re
 from pydantic import ValidationError, EmailStr
 from pydantic_extra_types.phone_numbers import PhoneNumber
+import phonenumbers
+from phonenumbers import NumberParseException
 from ..database.schemas import UserBase
 
 
@@ -65,12 +67,14 @@ def validate_email(value: str) -> str:
     return value
 
 def validate_phone(value: str) -> str:
-    """Validate phone number using Pydantic PhoneNumber type"""
+    """Validate phone number and return E.164 format"""
     value = value.strip()
     try:
-        validated = PhoneNumber(value)
-        return str(validated).replace("tel:", "")
-    except ValidationError:
+        parsed = phonenumbers.parse(value, None)
+        if not phonenumbers.is_valid_number(parsed):
+            raise ValueError('❌ Invalid phone number')
+        return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+    except NumberParseException:
         raise ValueError('❌ Phone number must be in international format (e.g., +998901234567)')
 
 class Registration(StatesGroup):
