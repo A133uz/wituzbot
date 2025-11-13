@@ -57,7 +57,7 @@
                     </div>
                     <div class="col-md-6">
                         <p><strong><i class="fas fa-map-marker-alt me-2"></i>Location:</strong> {{ event.location }}</p>
-                        <p><strong><i class="fas fa-tag me-2"></i>Type:</strong> <span class="badge bg-secondary">{{ event.type|title }}</span></p>
+                        <p><strong><i class="fas fa-tag me-2"></i>Type:</strong> <span class="badge bg-secondary">{{ event.type|replace("_", " ")|title }}</span></p>
                     </div>
                 </div>
                 

@@ -180,7 +180,7 @@ async def get_events_list(msg: Message):
         event_txt = (
             f"📅 <b>{event.title}</b>\n"
             f"🕐 {event.local_datetime.strftime('%d.%m.%Y at %H:%M')}\n"
-            f"{event.type.capitalize()}\n"
+            f"🏷 {event.type.replace('_', ' ').title()}\n"
             f"📍 {event.location}"
         )
         if event.image_url:
@@ -213,7 +213,7 @@ async def get_users_events(msg: Message):
                     f"📝 {event.desc}\n"
                     f"🕐 {event.local_datetime.strftime('%d.%m.%Y at %H:%M')}\n"
                     f"📍 {event.location}\n"
-                    f"🏷 {event.type.title()}\n"
+                    f"🏷 {event.type.replace('_', ' ').title()}\n"
                 )
 
                 if event.image_url:
@@ -240,10 +240,11 @@ async def get_users_profile(msg: Message):
         user_profile = (
             f"Name: {user.name}\n"
             f"Surname: {user.surname}\n"
-            f"Occupation: {user.organization}\n"
+            f"Organization: {user.organization}\n"
         )
         await msg.answer(
-            text=user_profile
+            text=user_profile,
+            parse_mode="HTML"
         )
     except Exception as e:
         logger.error(f"Error in the handler: {e}")
@@ -258,8 +259,7 @@ async def show_contacts(msg: Message):
     f"Send a message to our feedback bot: @wituzfeedback_bot \n\n" 
     f"You can send:\n"
     f"• Text descriptions of the problem\n"
-    f"• Screenshots or videos showing the issue\n"
-    f"• Any files that might help us understand the bug\n\n"
+    f"• Screenshots or videos showing the issue\n\n"
     f"We appreciate your help in making our service better! 🙏",
     parse_mode='HTML')
 
