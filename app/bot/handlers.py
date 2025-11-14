@@ -68,14 +68,26 @@ def validate_email(value: str) -> str:
 
 def validate_phone(value: str) -> str:
     """Validate phone number and return E.164 format"""
+    original_value = value
     value = value.strip()
+    logger.info(f"Phone validation start: original='{original_value}', stripped='{value}'")
+
+    if not value.startswith("+"):
+        logger.warning(f"Rejected phone (missing '+'): '{value}'")
+        raise ValueError("❌ Please share your phone number in international format (starting with '+').")
+    
     try:
         parsed = phonenumbers.parse(value, None)
+        logger.info(f"Parsed phone: raw='{value}', region='{parsed.country_code}'")
         if not phonenumbers.is_valid_number(parsed):
+            logger.warning(f"Invalid phone number (phonenumbers check failed): '{value}'")
             raise ValueError('❌ Invalid phone number')
-        return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
-    except NumberParseException:
-        raise ValueError('❌ Phone number must be in international format (e.g., +998901234567)')
+        e164 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+        logger.info(f"Valid phone, E.164 format: '{e164}'")
+        return e164
+    except Exception as exc:
+        logger.error(f"Phone parse fail [{value}]: {exc}")
+        raise ValueError('❌ Phone number must be in international format (e.g., +49..., +7..., +998...)')
 
 class Registration(StatesGroup):
     awaiting_input = State()
@@ -256,7 +268,7 @@ async def show_contacts(msg: Message):
     f"If you've encountered any issues or bugs while using our service, "
     f"please don't hesitate to report them! Your feedback helps us improve.\n\n"
     f"📝 <b>How to report:</b>\n"
-    f"Send a message to our feedback bot: @wituzfeedback_bot \n\n" 
+    f"Send a message to our feedback bot: @womenintechuz_fb_bot \n\n" 
     f"You can send:\n"
     f"• Text descriptions of the problem\n"
     f"• Screenshots or videos showing the issue\n\n"
