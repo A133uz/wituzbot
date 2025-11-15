@@ -53,6 +53,20 @@ async def cmd_start_registration(msg: Message, state: FSMContext):
     
 @router.message(RegistrationState.awaiting_input)
 async def process_input(msg: Message, state: FSMContext):
+    if msg.text == "I faced a problem":
+        await msg.answer(
+            "🐛 <b>Found a Bug? We Want to Hear About It!</b>\n\n"
+            "Please contact our feedback bot: @womenintechuz_fb_bot\n"
+            "Registration will restart.",
+            parse_mode='HTML'
+        )
+        await state.clear()
+        await state.set_state(RegistrationState.awaiting_input)
+        await state.update_data(step=0, registration_data={})
+        first_field, first_question = ordered_fields[0]
+        await msg.answer(first_question)
+        return
+    
     data = await state.get_data()
     step = data.get("step", 0)
     registration_data = data.get("registration_data", {})
@@ -216,21 +230,7 @@ async def show_contacts(msg: Message):
     f"• Screenshots or videos showing the issue\n\n"
     f"We appreciate your help in making our service better! 🙏",
     parse_mode='HTML')
-    
-@router.message(F.text == "I faced a problem")
-async def handle_reg_problem(msg: Message):
-    await msg.answer(f"🐛 <b>Found a Bug? We Want to Hear About It!</b>\n\n"
-    f"If you've encountered any issues or bugs while using our service, "
-    f"please don't hesitate to report them! Your feedback helps us improve.\n\n"
-    f"📝 <b>How to report:</b>\n"
-    f"Send a message to our feedback bot: @womenintechuz_fb_bot \n\n" 
-    f"You can send:\n"
-    f"• Text descriptions of the problem\n"
-    f"• Screenshots or videos showing the issue\n\n"
-    f"We appreciate your help in making our service better! 🙏",
-    parse_mode='HTML') 
-
-        
+          
 @router.callback_query(F.data.startswith('register_'))
 async def register_user(cb: CallbackQuery, state: FSMContext):
     event_id = int(cb.data.split('_')[1])

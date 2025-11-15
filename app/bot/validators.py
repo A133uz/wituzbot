@@ -43,8 +43,11 @@ def validate_phone(value: str) -> str:
     """Validate phone number and return E.164 format"""
     value = value.strip()
     logger.info(f"Phone validation start: original='{value}'")
+    
+    if not value.startswith("+"):
+        formatted_value = "+" + value
 
-    normalized = re.sub(r'[\s\-\(\)]', '', value)
+    normalized = re.sub(r'[\s\-\(\)]', '', formatted_value)
 
     if not re.match(r'^\+\d+$', normalized):
         logger.warning(f"Rejected phone (invalid format): '{normalized}'")
