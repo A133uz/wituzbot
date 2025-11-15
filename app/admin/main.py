@@ -304,6 +304,7 @@ async def create_event(
             location=event_data.location,
             image_url=image_url,
             registration_question=event_data.registration_question,
+            requires_email=event_data.requires_email,
             organizer_id=organizer.id
         )
 
@@ -436,16 +437,15 @@ async def edit_event(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         
-        # Check if datetime changed
         datetime_changed = event.date_time != utc_naive
         
-        # Update event
         event.title = event_data.title
         event.desc = event_data.desc
         event.type = event_data.type 
-        event.date_time = utc_naive  # Store as UTC naive
+        event.date_time = utc_naive  
         event.location = event_data.location
         event.registration_question = event_data.registration_question
+        event.requires_email = event_data.requires_email
         old_image_url = event.image_url
         
         if remove_image and old_image_url:

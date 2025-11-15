@@ -20,7 +20,7 @@ async def create_registration_button(event_id: int, user_id: int) -> InlineKeybo
 
 async def create_skip_button() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="Skip", callback_data="skip_question")
+    kb.button(text="Skip", callback_data="skip_field")
     
     return kb.as_markup()
 
