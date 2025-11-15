@@ -97,9 +97,9 @@ async def process_input(msg: Message, state: FSMContext):
         await state.update_data(step=step+1, registration_data=registration_data)
         
         if next_field == "phone":
-            await msg.answer(next_question, reply_markup=kb.contact_request_kb())
+            await msg.answer(next_question, reply_markup=kb.bot_registration_kb(include_contact=True))
         else:
-            await msg.answer(next_question, reply_markup=ReplyKeyboardRemove())
+            await msg.answer(next_question, reply_markup=kb.bot_registration_kb())
     else:
         try:
             registration_data["telegram_id"] = msg.from_user.id 
@@ -216,6 +216,19 @@ async def show_contacts(msg: Message):
     f"• Screenshots or videos showing the issue\n\n"
     f"We appreciate your help in making our service better! 🙏",
     parse_mode='HTML')
+    
+@router.message(F.text == "I faced a problem")
+async def handle_reg_problem(msg: Message):
+    await msg.answer(f"🐛 <b>Found a Bug? We Want to Hear About It!</b>\n\n"
+    f"If you've encountered any issues or bugs while using our service, "
+    f"please don't hesitate to report them! Your feedback helps us improve.\n\n"
+    f"📝 <b>How to report:</b>\n"
+    f"Send a message to our feedback bot: @womenintechuz_fb_bot \n\n" 
+    f"You can send:\n"
+    f"• Text descriptions of the problem\n"
+    f"• Screenshots or videos showing the issue\n\n"
+    f"We appreciate your help in making our service better! 🙏",
+    parse_mode='HTML') 
 
         
 @router.callback_query(F.data.startswith('register_'))
