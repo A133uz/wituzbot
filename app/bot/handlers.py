@@ -298,7 +298,6 @@ async def handle_skip_question(cb: CallbackQuery, state: FSMContext):
     event_id = data.get("event_id")
     user_id = cb.from_user.id
 
-    # Set skipped field as None
     if current_field == "email":
         answers["email"] = None
     elif current_field == "registration_question":
@@ -357,11 +356,5 @@ async def handle_waiting_for_answer(msg: Message, state: FSMContext):
         await msg.answer(msg_text)
         await state.clear()
     
-async def handle_registration_question(cb: CallbackQuery, question: str):
-    await cb.message.answer(
-        f"📝 <b>{question}</b>\n\nSend your answer, or tap 'Skip'.",
-        reply_markup=await kb.create_skip_button(),
-        parse_mode="HTML"
-    )
-    await cb.answer()
+
     
