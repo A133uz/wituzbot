@@ -13,7 +13,7 @@ def validate_name_or_surname(value: str, field_name: str) -> str:
         raise ValueError(f'{field_name} cannot be empty')
     if len(value) > 25:
         raise ValueError(f'{field_name} cannot exceed 25 characters')
-    if not re.match(r'^[a-zA-Z\s\-\'\.]+$', value):
+    if not re.match(r"^[a-zA-Z\u0400-\u04FF\s\-'\.]+$", value):
         raise ValueError(f'{field_name} can only contain letters, spaces, hyphens, apostrophes, and periods')
     return value
 
@@ -24,7 +24,7 @@ def validate_org(value: str) -> str:
         raise ValueError('Organization cannot be empty')
     if len(value) > 100:
         raise ValueError('Organization cannot exceed 100 characters')
-    if not re.match(r"^[a-zA-Z0-9\s\-\.\&\(\),]+$", value):
+    if not re.match(r"^[a-zA-Z\u0400-\u04FF0-9\s\-\.&(),]+$", value):
         raise ValueError('Organization can only contain standard characters')
     return value
 
@@ -46,6 +46,8 @@ def validate_phone(value: str) -> str:
     
     if not value.startswith("+"):
         formatted_value = "+" + value
+    else:
+        formatted_value = value
 
     normalized = re.sub(r'[\s\-\(\)]', '', formatted_value)
 
