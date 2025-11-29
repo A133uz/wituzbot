@@ -2,27 +2,26 @@ FROM wituzbot-base:latest
 
 WORKDIR /app
 
+
 COPY app/admin ./app/admin
 COPY templates ./templates
-
 COPY app/migrations ./app/migrations  
 COPY alembic.ini .
 
+
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
 
 COPY .env /app/.env.database             
 COPY app/admin/.env /app/.env.admin 
 COPY app/bot/.env /app/.env.mainbot
 
-
-
-
-ENV DATABASE_ENV_FILE=.env.database
-ENV SERVICE_ENV_FILE=.env.admin
+ENV DATABASE_ENV_FILE=.env.database \
+    SERVICE_ENV_FILE=.env.admin \
+    PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]
-
 CMD ["python", "-m", "app.admin.main"]

@@ -4,5 +4,7 @@ WORKDIR /app
 
 COPY app/bot/.env /app/.env.mainbot
 
+ENV PYTHONUNBUFFERED=1
+
 CMD ["python", "-m", "app.bot.main"]
 

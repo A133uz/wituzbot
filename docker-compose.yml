@@ -3,7 +3,7 @@
 services:
   postgres:
     image: postgres:16
-    container_name: wituzbot_postgres
+    container_name: postgres
     env_file:
       - .env
     volumes:
@@ -19,7 +19,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: wituzbot_redis
+    container_name: redis
     ports:
       - "6381:6379"
     volumes:
@@ -37,24 +37,13 @@ services:
       - "8085:8081"
     environment:
       - REDIS_HOSTS=local:redis:6379
-
-  base:
-    build:
-      context: .
-      dockerfile: Dockerfile.base
-    image: wituzbot-base:latest
-    command: echo "Base image built successfully"
-    restart: "no"
-
   
   admin:
     build:
       context: .
       dockerfile: Dockerfile.admin
-    container_name: wituzbot_admin
+    container_name: admin
     depends_on:
-      base:
-        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -62,6 +51,8 @@ services:
     ports:
       - "8008:8000"
     volumes:
+      - ./app/admin:/app/app/admin 
+      - ./templates:/app/templates
       - ./static:/app/static  
     env_file:
       - .env
@@ -72,16 +63,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.mainbot
-    container_name: wituzbot_main_bot
+    container_name: main_bot
     depends_on:
-      base:
-        condition: service_completed_successfully
       admin:
-        condition: service_completed_successfully
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ./app/bot:/app/app/bot
     env_file:
       - .env
       - app/bot/.env
@@ -92,10 +83,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.feedback_bot
-    container_name: wituzbot_feedback_bot
+    container_name: feedback_bot
     depends_on:
-      base:
-        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./app/feedback_bot:/app/app/feedback_bot
+    env_file:
+      - .env
+      - app/feedback_bot/.env
     restart: unless-stopped
 
  
@@ -103,13 +101,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.admin  
-    container_name: wituzbot_celery_worker
+    container_name: celery_worker
     command: celery -A reminder_system worker -P solo --loglevel=info --concurrency=2
     depends_on:
-      base:
-        condition: service_started
-      admin:
-        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -117,38 +111,12 @@ services:
     env_file:
       - .env
     environment:
-      - C_FORCE_ROOT=1  # Allow celery to run as root in Docker
+      - C_FORCE_ROOT=1  
       - SKIP_MIGRATIONS=true
     volumes:
-      - ./logs:/app/logs      # For celery logs
+      - ./reminder_system.py:/app/reminder_system.py
+      - ./logs:/app/logs     
     restart: unless-stopped
-
-  celery-beat:
-    build:
-      context: .
-      dockerfile: Dockerfile.admin  # Reuse admin dockerfile
-    container_name: wituzbot_celery_beat
-    command: celery -A reminder_system beat --loglevel=info --schedule=/app/data/schedule.db
-    depends_on:
-      base:
-        condition: service_started
-      admin:
-        condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      - C_FORCE_ROOT=1
-      - SKIP_MIGRATIONS=true
-    volumes:
-      - ./logs:/app/logs
-      - celery_beat_data:/app/data
-    restart: unless-stopped
-
-  
 
 volumes:
   postgres_data:

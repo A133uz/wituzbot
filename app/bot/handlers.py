@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 reg_fields = {
     "name" : "What's your first name?",
     "surname" : "What's your last name?",
-    "phone" : "📱 Please share your phone number using the button below, or type it manually (e.g., +998901234567):",
+    "phone" : "📱 Please share your phone number using the button below:",
     "organization" : "Where do you work/study?"
 }
 
@@ -77,7 +77,7 @@ async def process_input(msg: Message, state: FSMContext):
         if msg.contact:
             value = msg.contact.phone_number
         else:
-            await msg.answer("❌ Please share your contact or type your phone number.")
+            await msg.answer("❌ Please share your contact")
             return
     else:
         if not msg.text:
