@@ -2,7 +2,10 @@ FROM wituzbot-base:latest
 
 WORKDIR /app
 
+
 COPY app/feedback_bot ./app/feedback_bot
 COPY app/feedback_bot/.env /app/.env.feedback_bot
+
+ENV PYTHONUNBUFFERED=1
 
 CMD ["python", "-m", "app.feedback_bot.main"]

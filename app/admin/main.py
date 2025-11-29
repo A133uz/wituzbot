@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends, HTTPException, status, Response, UploadFile, File, Form
+from fastapi import FastAPI, Request, Depends, HTTPException, status, Response, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -25,15 +25,15 @@ from .config import AdminSettings
 from database.models import Organizer, Event, Registration, async_main
 from database.schemas import EventCreate, EventUpdate, OrganizerCreate, OrganizerUpdate, LoginRequest
 from .init_admin import create_initial_superuser
+from contextlib import asynccontextmanager
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent)) 
-from reminder_system  import _auto_schedule_reminder, update_event_and_reschedule, _cancel_reminder
+from reminder_system  import schedule_reminder, update_event_and_reschedule, _cancel_reminder
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import logging
 import uvicorn
-import asyncio
 
 
 
@@ -42,7 +42,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 settings = AdminSettings()
 
-app = FastAPI(title="Event Admin Panel")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🚀 Application starting...")
+    await async_main()
+    await create_initial_superuser()
+    logger.info("✅ Application ready")
+    yield
+    logger.info("👋 Application shutting down...")
+
+app = FastAPI(title="Event Admin Panel", lifespan=lifespan)
 
 
 
@@ -64,7 +73,44 @@ security = HTTPBearer(auto_error=False)
 
 s3_service = S3Service()
 
+def schedule_reminder_bg(event_id: int):
+    """Background task to schedule reminder"""
+    try:
+        with get_sync_session() as sync_db:
+            sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
+            if sync_event:
+                task_id = schedule_reminder(sync_event, sync_db)
+                if task_id:
+                    logger.info(f"✅ Reminder scheduled for event {event_id}")
+                else:
+                    logger.info(f"ℹ️ No reminder needed for event {event_id} (less than 24h away)")
+    except Exception as e:
+        logger.error(f"Failed to schedule reminder for event {event_id}: {e}")
 
+def reschedule_reminder_bg(event_id: int):
+    """Background task to reschedule reminder"""
+    try:
+        with get_sync_session() as sync_db:
+            sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
+            if sync_event:
+                task_id = update_event_and_reschedule(sync_event, sync_db)
+                if task_id:
+                    logger.info(f"✅ Reminder rescheduled for event {event_id}")
+                else:
+                    logger.info(f"ℹ️ No reminder needed for event {event_id} (less than 24h away)")
+    except Exception as e:
+        logger.error(f"Failed to reschedule reminder for event {event_id}: {e}")
+
+def cancel_reminder_bg(event_id: int):
+    """Background task to cancel reminder"""
+    try:
+        with get_sync_session() as sync_db:
+            sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
+            if sync_event:
+                _cancel_reminder(sync_event, sync_db)
+                logger.info(f"✅ Reminder cancelled for event {event_id}")
+    except Exception as e:
+        logger.error(f"Failed to cancel reminder for event {event_id}: {e}")
 
 # Dependency to get current organizer
 def get_current_organizer(request: Request, db: Session = Depends(get_sync_db),
@@ -273,6 +319,7 @@ async def create_event_form(
 @app.post("/events/create")
 async def create_event(
     request: Request,
+    bg_task: BackgroundTasks,
     event_data: EventCreate = Depends(),
     db: AsyncSession = Depends(get_async_db),
     organizer = Depends(get_current_organizer),
@@ -314,26 +361,7 @@ async def create_event(
 
         logger.info(f"✅ Event saved with date_time: {new_event.date_time}")
         
-        try:
-            with get_sync_session() as sync_db:
-                # Convert to sync operation for Celery scheduling
-
-
-                # Get the event in sync session
-                sync_event = sync_db.query(Event).filter(Event.id == new_event.id).first()
-
-                # Schedule reminder
-                task_id = _auto_schedule_reminder(sync_event, sync_db)
-
-                if task_id:
-                    logger.info(f"✅ Event created with automatic reminder: {new_event.id}")
-                else:
-                    logger.info(f"✅ Event created (no reminder - less than 24h): {new_event.id}")
-                
-            
-        except Exception as e:
-            logger.error(f"Failed to schedule reminder for event {new_event.id}: {e}")
-            # Don't fail the entire request if reminder scheduling fails
+        bg_task.add_task(schedule_reminder_bg, new_event.id)
     
         return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     
@@ -413,6 +441,7 @@ async def edit_event_form(
 async def edit_event(
     request: Request,
     event_id: int,
+    bg_task: BackgroundTasks,
     event_data: EventUpdate = Depends(),
     db: AsyncSession = Depends(get_async_db),
     image: UploadFile = File(None),
@@ -459,19 +488,7 @@ async def edit_event(
         await db.commit()
         
         if datetime_changed:
-            try:
-                with get_sync_session() as sync_db:
-                    sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
-                    new_task_id = update_event_and_reschedule(sync_event, sync_db)
-                    
-                    if new_task_id:
-                        logger.info(f"✅ Event {event_id} updated and reminder rescheduled")
-                    else:
-                        logger.info(f"✅ Event {event_id} updated (no reminder - less than 24h)")
-
-                
-            except Exception as e:
-                logger.error(f"Failed to reschedule reminder for event {event_id}: {e}")
+            bg_task.add_task(reschedule_reminder_bg, event_id)
         
         
         return RedirectResponse(url=f"/events/{event_id}", status_code=status.HTTP_302_FOUND)
@@ -483,6 +500,7 @@ async def edit_event(
 @app.post("/events/{event_id}/delete")
 async def delete_event(
     event_id: int,
+    bg_task: BackgroundTasks,
     db: AsyncSession = Depends(get_async_db),
     organizer = Depends(get_current_organizer)
 ):
@@ -494,17 +512,9 @@ async def delete_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    try:
-        if event.celery_task_id:  
-            with get_sync_session() as sync_db:
-                
-                
-                sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
-
-                _cancel_reminder(sync_event, sync_db)
-                logger.info(f"🗑️ Cancelled reminder for event {event_id} before deletion")        
-    except Exception as e:
-        logger.error(f"Failed to cancel reminder for event {event_id}: {e}") 
+    if event.celery_task_id:
+        bg_task.add_task(cancel_reminder_bg, event_id)
+        logger.info(f"🗑️ Scheduling cancellation of reminder for event {event_id}")
         
     s3_service.delete_image(event.image_url)
         
@@ -730,16 +740,17 @@ async def delete_admin(
     
 
 
-async def main():
-    await async_main()
-    await create_initial_superuser()
-    config = uvicorn.Config("app.admin.main:app", host="0.0.0.0", port=8000, reload=True)
-    server = uvicorn.Server(config)
-    await server.serve()
+# async def main():
+#     await async_main()
+#     await create_initial_superuser()
+#     config = uvicorn.Config("app.admin.main:app", host="0.0.0.0", port=8000, reload=True)
+#     server = uvicorn.Server(config)
+#     await server.serve()
     
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        import uvicorn
+        uvicorn.run("app.admin.main:app", host="0.0.0.0", port=8000, reload=True)
     except KeyboardInterrupt:
         print("Admin panel has been stopped")
 

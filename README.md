@@ -1,8 +1,8 @@
 ## For Docker:
 ```
+docker build -t wituzbot-base:latest -f Dockerfile.base .
 docker compose run --rm admin alembic revision --autogenerate -m "initial migration"
 docker compose up -d --build
-docker compose restart
 ```
 
 ## env for admin panel:

@@ -13,6 +13,10 @@ from .utils import get_password_hash
 async def create_initial_superuser():
     settings = AdminSettings()
     
+    print(f"🔍 DEBUG: ADMIN_PASS = '{settings.ADMIN_PASS}'")
+    print(f"🔍 DEBUG: Password length = {len(settings.ADMIN_PASS)} characters")
+    print(f"🔍 DEBUG: Password bytes = {len(settings.ADMIN_PASS.encode('utf-8'))} bytes")
+    
     async with get_session() as session:
         try:
             res = await session.execute(select(Organizer).filter(Organizer.is_superuser == True))

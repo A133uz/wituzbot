@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.result import AsyncResult
 
 from datetime import datetime, timedelta, timezone
 import asyncio
@@ -27,87 +28,84 @@ celery_app.conf.update(
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',
-    # task_routes={
-    #     'reminder_system.send_reminder_task': {'queue': 'reminders'},
-    # },
     worker_pool='gevent',  # or 'gevent' or 'eventlet'
     worker_concurrency=10,
 )
 
 
     
-@celery_app.on_after_configure.connect
-def setup_periodic_tasks(sender, **kwargs):
-    # Check every minute for reminders that need to be sent
-    sender.add_periodic_task(
-        60.0,  # Every 60 seconds
-        check_pending_reminders.s(),
-        name='check for pending reminders'
-    )
+# @celery_app.on_after_configure.connect
+# def setup_periodic_tasks(sender, **kwargs):
+#     # Check every minute for reminders that need to be sent
+#     sender.add_periodic_task(
+#         60.0,  # Every 60 seconds
+#         check_pending_reminders.s(),
+#         name='check for pending reminders'
+#     )
 
-@celery_app.task
-def check_pending_reminders():
-    """Periodic task that checks if any reminders need to be sent"""
-    logging.info("🔍 Checking for pending reminders...")
-    
-    try:
-        with get_sync_session() as db:
-            now = datetime.now(timezone.utc)
-            logging.info(f"Current time (UTC): {now.strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            
-            events = db.query(Event).filter(
-                Event.reminder_sent == False,
-                Event.celery_task_id != None  
-            ).all()
-            
-            logging.info(f"Found {len(events)} events to check")
-            
-            for event in events:
-                logging.info(f"\n--- Checking Event {event.id}: {event.title} ---")
-                
-                
-                event_dt = event.date_time
-                logging.info(f"Event datetime (raw): {event_dt} (tzinfo: {event_dt.tzinfo})")
-                
-                if event_dt.tzinfo is None:
-                    event_dt = event_dt.replace(tzinfo=timezone.utc)
-                    logging.info(f"Added UTC timezone: {event_dt}")
-                
-                
-                if event_dt <= now:
-                    logging.info(f"❌ Event {event.id} is in the past, skipping")
-                    continue
-                
-                logging.info(f"Event time: {event_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                
-                
-                reminder_time = event_dt - timedelta(hours=24)
-                logging.info(f"Reminder should fire at: {reminder_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                
-                time_diff = reminder_time - now
-                logging.info(f"Time until reminder: {time_diff}")
-                
-                
-                grace_period_start = now - timedelta(minutes=2)
-                
-                logging.info(f"Checking: {reminder_time} <= {now} and {reminder_time} > {grace_period_start}")
-                
-                if reminder_time <= now and reminder_time > grace_period_start:
-                    logging.info(f"🔔 ✅ TIME TO SEND! Triggering reminder for event {event.id}!")
-                    send_reminder_task.delay(event.id)
-                else:
-                    if reminder_time > now:
-                        logging.info(f"⏳ Too early - reminder in {time_diff}")
-                    else:
-                        logging.info(f"⏰ Too late - reminder was {abs(time_diff)} ago")
-            
-            logging.info(f"\n✅ Check complete. Checked {len(events)} events.")
-            
-    except Exception as e:
-        logging.error(f"❌ Error checking reminders: {str(e)}")
-        import traceback
-        logging.error(traceback.format_exc())
+# @celery_app.task
+# def check_pending_reminders():
+#     """Periodic task that checks if any reminders need to be sent"""
+#     logging.info("🔍 Checking for pending reminders...")
+#     
+#     try:
+#         with get_sync_session() as db:
+#             now = datetime.now(timezone.utc)
+#             logging.info(f"Current time (UTC): {now.strftime('%Y-%m-%d %H:%M:%S')}")
+#             
+#             
+#             events = db.query(Event).filter(
+#                 Event.reminder_sent == False,
+#                 Event.celery_task_id != None  
+#             ).all()
+#             
+#             logging.info(f"Found {len(events)} events to check")
+#             
+#             for event in events:
+#                 logging.info(f"\n--- Checking Event {event.id}: {event.title} ---")
+#                 
+#                 
+#                 event_dt = event.date_time
+#                 logging.info(f"Event datetime (raw): {event_dt} (tzinfo: {event_dt.tzinfo})")
+#                 
+#                 if event_dt.tzinfo is None:
+#                     event_dt = event_dt.replace(tzinfo=timezone.utc)
+#                     logging.info(f"Added UTC timezone: {event_dt}")
+#                 
+#                 
+#                 if event_dt <= now:
+#                     logging.info(f"❌ Event {event.id} is in the past, skipping")
+#                     continue
+#                 
+#                 logging.info(f"Event time: {event_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+#                 
+#                 
+#                 reminder_time = event_dt - timedelta(hours=24)
+#                 logging.info(f"Reminder should fire at: {reminder_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+#                 
+#                 time_diff = reminder_time - now
+#                 logging.info(f"Time until reminder: {time_diff}")
+#                 
+#                 
+#                 grace_period_start = now - timedelta(minutes=2)
+#                 
+#                 logging.info(f"Checking: {reminder_time} <= {now} and {reminder_time} > {grace_period_start}")
+#                 
+#                 if reminder_time <= now and reminder_time > grace_period_start:
+#                     logging.info(f"🔔 ✅ TIME TO SEND! Triggering reminder for event {event.id}!")
+#                     send_reminder_task.delay(event.id)
+#                 else:
+#                     if reminder_time > now:
+#                         logging.info(f"⏳ Too early - reminder in {time_diff}")
+#                     else:
+#                         logging.info(f"⏰ Too late - reminder was {abs(time_diff)} ago")
+#             
+#             logging.info(f"\n✅ Check complete. Checked {len(events)} events.")
+#             
+#     except Exception as e:
+#         logging.error(f"❌ Error checking reminders: {str(e)}")
+#         import traceback
+#         logging.error(traceback.format_exc())
 
 @celery_app.task(bind=True, max_retries=3)
 def send_reminder_task(self, event_id: int):
@@ -195,49 +193,55 @@ async def send_telegram_reminder(event: Event):
         import traceback
         logging.error(traceback.format_exc())
         return False
-        
-
-def _auto_schedule_reminder(event: Event, db: Session):
-    """
-    Mark event as having a scheduled reminder
-    (Actual sending handled by periodic checker)
-    """
+    
+def schedule_reminder(event: Event, db: Session):
     event_dt = event.date_time
     if event_dt.tzinfo is None:
         event_dt = event_dt.replace(tzinfo=timezone.utc)
         
-    reminder_datetime = event_dt - timedelta(hours=24)
+    reminder_dt = event_dt - timedelta(hours=24)
     now_utc = datetime.now(timezone.utc)
     
-    if reminder_datetime < now_utc:
+    if reminder_dt < now_utc:
         logging.info(f"Event {event.id} is less than 24 hours away - no reminder scheduled")
+        event.celery_task_id = None
+        event.reminder_sent = False
+        db.commit()
         return None
     
-    # Just mark that this event should have a reminder
-    # The periodic task will actually send it at the right time
-    event.celery_task_id = f"scheduled_{event.id}"  # Placeholder to mark as scheduled
+    result = send_reminder_task.apply_async(
+        args=[event.id],
+        eta=reminder_dt
+    )
+    
+    event.celery_task_id = result.id
+    event.reminder_sent = False
     db.commit()
     
     logging.info(
-        f"🕐 Reminder marked for periodic check - event {event.id} "
-        f"will be reminded at {reminder_datetime.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        f"🕐 Reminder scheduled for event {event.id} '{event.title}' "
+        f"at {reminder_dt.strftime('%Y-%m-%d %H:%M:%S UTC')} "
+        f"(task_id: {result.id})"
     )
     
-    return event.celery_task_id
+    return result.id
+        
 
 def update_event_and_reschedule(event: Event, db: Session):
     """Update event and reschedule reminder"""
     _cancel_reminder(event, db)
     
-    # Reset reminder status
-    event.reminder_sent = False
-    
-    # Schedule new
-    return _auto_schedule_reminder(event, db)
+    return schedule_reminder(event, db)
 
 def _cancel_reminder(event: Event, db: Session):
     """Cancel existing reminder"""
-    if event.celery_task_id:
+    if event.celery_task_id and not event.celery_task_id.startswith("scheduled_"):
+        try:
+            AsyncResult(event.celery_task_id).revoke()
+            logging.info(f"❌ Cancelled reminder for event {event.id} (task_id: {event.celery_task_id})")
+        except Exception as e:
+            logging.warning(f"Failed to revoke task {event.celery_task_id}: {e}")
+        
         event.celery_task_id = None
+        event.reminder_sent = False
         db.commit()
-        logging.info(f"Cancelled reminder for event {event.id}")

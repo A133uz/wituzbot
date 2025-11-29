@@ -1,7 +1,7 @@
 from typing import Optional
 import datetime, jwt, boto3
 from fastapi import Request, UploadFile, HTTPException
-from passlib.context import CryptContext
+import bcrypt
 from botocore.exceptions import ClientError
 from .config import AdminSettings
 
@@ -9,7 +9,7 @@ import logging, uuid
 
 settings = AdminSettings()
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +58,14 @@ class S3Service:
 
 # Password utilities
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    password_bytes = plain_password.encode('utf-8')
+    hashed_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(password_bytes, hashed_bytes)
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    password_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password_bytes, salt).decode('utf-8')
 
 # JWT token utilities
 def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None):
