@@ -24,10 +24,10 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 reg_fields = {
-    "name" : "What's your first name?",
-    "surname" : "What's your last name?",
+    "name": "What's your first name?\n\n<b>Example:</b> Alisher",
+    "surname": "What's your last name?\n\n<b>Example:</b> Valiyev",
     "phone" : "📱 Please share your phone number using the button below:",
-    "organization" : "Where do you work/study?"
+    "organization" : "Where do you work/study?\n\n<b>Example:</b> Amity University"
 }
 
 ordered_fields = list(reg_fields.items())
@@ -49,7 +49,8 @@ async def cmd_start_registration(msg: Message, state: FSMContext):
     await state.set_state(RegistrationState.awaiting_input)
     await state.update_data(step=0, registration_data={})
     field, question = ordered_fields[0]
-    await msg.answer(f"Welcome! Let's meet! {question}")
+    await msg.answer(f"Welcome! Let's meet! {question}",
+                     parse_mode="HTML")
     
 @router.message(RegistrationState.awaiting_input)
 async def process_input(msg: Message, state: FSMContext):
@@ -64,7 +65,7 @@ async def process_input(msg: Message, state: FSMContext):
         await state.set_state(RegistrationState.awaiting_input)
         await state.update_data(step=0, registration_data={})
         first_field, first_question = ordered_fields[0]
-        await msg.answer(first_question)
+        await msg.answer(first_question, parse_mode="HTML")
         return
     
     data = await state.get_data()
