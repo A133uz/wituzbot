@@ -112,9 +112,11 @@ async def process_input(msg: Message, state: FSMContext):
         await state.update_data(step=step+1, registration_data=registration_data)
         
         if next_field == "phone":
-            await msg.answer(next_question, reply_markup=kb.bot_registration_kb(include_contact=True))
+            await msg.answer(next_question, reply_markup=kb.bot_registration_kb(include_contact=True),
+                             parse_mode="HTML")
         else:
-            await msg.answer(next_question, reply_markup=kb.bot_registration_kb())
+            await msg.answer(next_question, reply_markup=kb.bot_registration_kb(),
+                             parse_mode="HTML")
     else:
         try:
             registration_data["telegram_id"] = msg.from_user.id 
@@ -130,7 +132,7 @@ async def process_input(msg: Message, state: FSMContext):
             await state.set_state(RegistrationState.awaiting_input)
             await state.update_data(step=0, registration_data={})
             first_field, first_question = ordered_fields[0]
-            await msg.answer(first_question)
+            await msg.answer(first_question, parse_mode="HTML")
             return
         
         await msg.answer("You have been successfully registered!", reply_markup=kb.menu)
