@@ -180,7 +180,7 @@ async def get_users_events(msg: Message):
 
         for event in users_events:
                 event_text = (
-                    f"📅 <b>{event.title}</b>\n"
+                    f"📅 <b>{event.title}</b>\n\n"
                     f"📝 {event.desc}\n"
                     f"🕐 {event.local_datetime.strftime('%d.%m.%Y at %H:%M')}\n"
                     f"📍 {event.location}\n"
