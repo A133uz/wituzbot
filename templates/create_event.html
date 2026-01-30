@@ -98,6 +98,20 @@
                         <div class="form-text">This question will be asked to users during registration. Leave blank if not needed.</div>
                     </div>
 
+                    <div class="mb-3 form-check form-switch">
+                        <input 
+                            type="checkbox" 
+                            class="form-check-input" 
+                            id="requires_email" 
+                            name="requires_email"
+                            {% if form_data and (form_data.get('requires_email') or form_data.get('requires_email') == 'on') %}checked{% endif %}
+                        >
+                        <label for="requires_email" class="form-check-label">
+                            Require user email during registration
+                        </label>
+                        <div class="form-text">If checked, users will be required to provide their email when registering for this event.</div>
+                    </div>
+
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
@@ -107,7 +121,7 @@
                                 <select class="form-select" id="type" name="type" required>
                                     <option value="">Select type...</option>
                                     <option value="online" {% if form_data and form_data.get('type') == 'online' %}selected{% endif %}>Online</option>
-                                    <option value="in_person" {% if form_data and form_data.get('type') == 'in_person' %}selected{% endif %}>In-Person</option>
+                                    <option value="in_person" {% if form_data and form_data.get('type') == 'in_person' %}selected{% endif %}>In Person</option>
                                    
                                 </select>
                                 <div class="invalid-feedback">

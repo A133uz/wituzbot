@@ -28,6 +28,7 @@
   </div>
 </div>
 {% endif %}
+
 {% if event.registration_question %}
 <div class="card border-info mb-4 mx-auto" style="max-width:450px;">
   <div class="card-header bg-info text-white d-flex align-items-center">
@@ -40,6 +41,34 @@
     </p>
     <small class="text-muted">This question is asked to users during Telegram registration.</small>
   </div>
+</div>
+{% endif %}
+
+{% if event.requires_email %}
+<div class="card border-primary mb-4 mx-auto" style="max-width:450px;">
+    <div class="card-header bg-primary text-white d-flex align-items-center">
+        <i class="fas fa-envelope fa-lg me-2"></i>
+        <span>Email Required For Registration</span>
+    </div>
+    <div class="card-body">
+        <p class="mb-0" style="font-size:1.1rem;">
+            <span class="badge bg-success">Email required</span>
+            <small class="text-muted ms-2">Users must provide email when registering.</small>
+        </p>
+    </div>
+</div>
+{% else %}
+<div class="card border-secondary mb-4 mx-auto" style="max-width:450px;">
+    <div class="card-header bg-secondary text-white d-flex align-items-center">
+        <i class="fas fa-envelope fa-lg me-2"></i>
+        <span>No Email Required</span>
+    </div>
+    <div class="card-body">
+        <p class="mb-0" style="font-size:1.1rem;">
+            <span class="badge bg-secondary">Email not required</span>
+            <small class="text-muted ms-2">Registration does not require user email.</small>
+        </p>
+    </div>
 </div>
 {% endif %}
 
@@ -57,7 +86,7 @@
                     </div>
                     <div class="col-md-6">
                         <p><strong><i class="fas fa-map-marker-alt me-2"></i>Location:</strong> {{ event.location }}</p>
-                        <p><strong><i class="fas fa-tag me-2"></i>Type:</strong> <span class="badge bg-secondary">{{ event.type|title }}</span></p>
+                        <p><strong><i class="fas fa-tag me-2"></i>Type:</strong> <span class="badge bg-secondary">{{ event.type|replace("_", " ")|title }}</span></p>
                     </div>
                 </div>
                 
@@ -111,7 +140,9 @@
                 <thead>
                     <tr>
                         <th>Name</th>
+                        {% if event.requires_email %}
                         <th>Email</th>
+                        {% endif %}
                         <th>Phone Number</th>
                         <th>Organization</th>
                         <th>Telegram Username</th>
@@ -135,12 +166,14 @@
                                 </div>
                             </div>
                         </td>
+                        {% if registration.email %}
                         <td>
-                            <a href="mailto:{{ registration.user.email }}" class="text-decoration-none">
+                            <a href="mailto:{{ registration.email }}" class="text-decoration-none">
                                 <i class="fas fa-envelope me-1"></i>
-                                {{ registration.user.email }}
+                                {{ registration.email if registration.email else "-" }}
                             </a>
                         </td>
+                        {% endif %}
                         <td>{{ registration.user.phone }}</td>
                         <td>{{ registration.user.organization }}</td>
                         <td>{{ registration.user.telegram_username }}</td>

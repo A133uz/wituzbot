@@ -18,7 +18,6 @@ class UserBase(BaseModel):
     """Base user schema with common fields"""
     name: str = Field(..., min_length=1, max_length=25, description="User's first name")
     surname: str = Field(..., min_length=1, max_length=25, description="User's surname")
-    email: EmailStr = Field(..., max_length=100, description="User's email address")
     organization: str = Field(..., min_length=1, max_length=100, description="User's organization/workplace")
     phone: str = Field(..., description="User's phone number in international format")
     telegram_username: Optional[str] = Field(None, description="Telegram username")
@@ -79,7 +78,6 @@ class UserUpdate(BaseModel):
     """Schema for updating user information"""
     name: Optional[str] = Field(None, min_length=1, max_length=25)
     surname: Optional[str] = Field(None, min_length=1, max_length=25)
-    email: Optional[EmailStr] = Field(None, max_length=100)
     phone: Optional[str] = Field(None, description="Phone number")
     organization: Optional[str] = Field(None, min_length=1, max_length=100)
     telegram_username: Optional[str] = Field(None, description="Telegram username")
@@ -255,6 +253,7 @@ class EventCreate(EventBase):
     date: str = Field(..., pattern=r'^\d{4}-\d{2}-\d{2}$', description="Event date (YYYY-MM-DD)")
     time: str = Field(..., pattern=r'^\d{2}:\d{2}$', description="Event time (HH:MM in 24-hour format)")
     registration_question: Optional[str] = Field(None, description="Optional registration question")
+    requires_email: bool = Field(False, description="Optional email field")
 
     @field_validator('date')
     @classmethod
@@ -286,6 +285,7 @@ class EventUpdate(EventBase):
     date: str = Field(..., pattern=r'^\d{4}-\d{2}-\d{2}$')
     time: str = Field(..., pattern=r'^\d{2}:\d{2}$')
     registration_question: Optional[str] = None
+    requires_email: bool = False
 
     @field_validator('date')
     @classmethod
@@ -317,6 +317,7 @@ class EventResponse(EventBase):
     reminder_sent: bool = False
     image_url: Optional[str] = None
     registration_question: Optional[str] = None
+    requires_email: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -359,6 +360,7 @@ class RegistrationCreate(RegistrationBase):
     """Schema for creating a registration"""
     created_at: Optional[datetime] = Field(default_factory=datetime.now, description="Registration timestamp")
     question_answer: Optional[str] = Field(None, description="Optional answer to custom registration question")
+    email: Optional[EmailStr] = Field(..., max_length=100, description="User's email address")
 
     @field_validator('user_id', 'event_id')
     @classmethod
@@ -374,6 +376,7 @@ class RegistrationResponse(RegistrationBase):
     id: int
     created_at: datetime
     question_answer: Optional[str] = None
+    email: Optional[EmailStr] = None
 
     model_config = {"from_attributes": True}
 

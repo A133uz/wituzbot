@@ -50,11 +50,13 @@ async def get_event_by_id(event_id: int):
     
 async def get_users_events_from_db(tg_id: int):
     try:
+        now = datetime.now(timezone.utc)
         async with get_session() as session:
             res = await session.execute(
                 select(Event)
                 .join(Registration, Event.id == Registration.event_id)
-                .where(Registration.user_id == tg_id)
+                .where(Registration.user_id == tg_id,
+                       Event.date_time >= now)
                 .order_by(Event.date_time)
             )
             return res.scalars().all()
@@ -62,7 +64,7 @@ async def get_users_events_from_db(tg_id: int):
         print(f"db error: {e}")
         return 
     
-async def set_registration(event_id: int, tg_id: int, answer: Optional[str] = None):
+async def set_registration(event_id: int, tg_id: int, answer: Optional[str] = None, email: Optional[str] = None):
     async with get_session() as session:
         try:
             existing = await session.execute(
@@ -77,7 +79,8 @@ async def set_registration(event_id: int, tg_id: int, answer: Optional[str] = No
                 user_id=tg_id,
                 event_id=event_id,
                 created_at=datetime.now(),
-                question_answer=answer
+                question_answer=answer,
+                email=email
             )
             registration = Registration(**reg_schema.model_dump())
             session.add(registration)

@@ -7,12 +7,10 @@ from aiogram.exceptions import TelegramBadRequest
 
 import asyncio
 import logging
-import re
-from pydantic import ValidationError, EmailStr
-from pydantic_extra_types.phone_numbers import PhoneNumber
-import phonenumbers
-from phonenumbers import NumberParseException
-from ..database.schemas import UserBase
+from pydantic import ValidationError
+from .validators import (validate_email, validate_name_or_surname, 
+                         validate_org, validate_phone
+                        )
 
 
 from ..database.requests import (set_user, get_user, 
@@ -26,61 +24,20 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 reg_fields = {
-    "name" : "What's your name?",
-    "surname" : "What's your surname?",
-    "email" : "What's your email?",
-    "phone" : "📱 Please share your phone number using the button below, or type it manually (e.g., +998901234567):",
-    "organization" : "Where do you work/study?"
+    "name": "What's your first name?\n\n<b>Example:</b> Alisher",
+    "surname": "What's your last name?\n\n<b>Example:</b> Valiyev",
+    "phone" : "📱 Please share your phone number using the button below:",
+    "organization" : "Where do you work/study?\n\n<b>Example:</b> Amity University"
 }
 
 ordered_fields = list(reg_fields.items())
 
-def validate_name_or_surname(value: str, field_name: str) -> str:
-    """Validate name/surname fields"""
-    value = value.strip()
-    if not value or len(value) < 1:
-        raise ValueError(f'{field_name} cannot be empty')
-    if len(value) > 25:
-        raise ValueError(f'{field_name} cannot exceed 25 characters')
-    if not re.match(r'^[a-zA-Z\s\-\'\.]+$', value):
-        raise ValueError(f'{field_name} can only contain letters, spaces, hyphens, apostrophes, and periods')
-    return value
 
-def validate_org(value: str) -> str:
-    """Validate organization field"""
-    value = value.strip()
-    if not value or len(value) < 1:
-        raise ValueError('Organization cannot be empty')
-    if len(value) > 100:
-        raise ValueError('Organization cannot exceed 100 characters')
-    return value
 
-def validate_email(value: str) -> str:
-    """Validate email field"""
-    value = value.strip()
-    try:
-        EmailStr._validate(value)
-    except Exception:
-        raise ValueError('Please enter a valid email address')
-    if len(value) > 100:
-        raise ValueError('Email cannot exceed 100 characters')
-    return value
-
-def validate_phone(value: str) -> str:
-    """Validate phone number and return E.164 format"""
-    value = value.strip()
-    try:
-        parsed = phonenumbers.parse(value, None)
-        if not phonenumbers.is_valid_number(parsed):
-            raise ValueError('❌ Invalid phone number')
-        return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
-    except NumberParseException:
-        raise ValueError('❌ Phone number must be in international format (e.g., +998901234567)')
-
-class Registration(StatesGroup):
+class RegistrationState(StatesGroup):
     awaiting_input = State()
     
-class EventRegistration(StatesGroup):
+class EventRegistrationState(StatesGroup):
     waiting_for_answer = State()
     
 @router.message(CommandStart())
@@ -89,13 +46,28 @@ async def cmd_start_registration(msg: Message, state: FSMContext):
     if user:
         await msg.answer("Welcome back!", reply_markup=kb.menu)
         return 
-    await state.set_state(Registration.awaiting_input)
+    await state.set_state(RegistrationState.awaiting_input)
     await state.update_data(step=0, registration_data={})
     field, question = ordered_fields[0]
-    await msg.answer(f"Welcome! Let's meet! {question}")
+    await msg.answer(f"Welcome! Let's meet! {question}",
+                     parse_mode="HTML")
     
-@router.message(Registration.awaiting_input)
+@router.message(RegistrationState.awaiting_input)
 async def process_input(msg: Message, state: FSMContext):
+    if msg.text == "I faced a problem":
+        await msg.answer(
+            "🐛 <b>Found a Bug? We Want to Hear About It!</b>\n\n"
+            "Please contact our feedback bot: @womenintechuz_fb_bot\n"
+            "Registration will restart.",
+            parse_mode='HTML'
+        )
+        await state.clear()
+        await state.set_state(RegistrationState.awaiting_input)
+        await state.update_data(step=0, registration_data={})
+        first_field, first_question = ordered_fields[0]
+        await msg.answer(first_question, parse_mode="HTML")
+        return
+    
     data = await state.get_data()
     step = data.get("step", 0)
     registration_data = data.get("registration_data", {})
@@ -105,10 +77,8 @@ async def process_input(msg: Message, state: FSMContext):
     if field == "phone":
         if msg.contact:
             value = msg.contact.phone_number
-        elif msg.text:
-            value = msg.text.strip()
         else:
-            await msg.answer("❌ Please share your contact or type your phone number.")
+            await msg.answer("❌ Please share your contact")
             return
     else:
         if not msg.text:
@@ -122,7 +92,6 @@ async def process_input(msg: Message, state: FSMContext):
         validators = {
             "name": lambda v: validate_name_or_surname(v, "Name"),
             "surname": lambda v: validate_name_or_surname(v, "Surname"),
-            "email": validate_email,
             "phone": validate_phone,
             "organization": validate_org
         }
@@ -143,9 +112,11 @@ async def process_input(msg: Message, state: FSMContext):
         await state.update_data(step=step+1, registration_data=registration_data)
         
         if next_field == "phone":
-            await msg.answer(next_question, reply_markup=kb.contact_request_kb())
+            await msg.answer(next_question, reply_markup=kb.bot_registration_kb(include_contact=True),
+                             parse_mode="HTML")
         else:
-            await msg.answer(next_question, reply_markup=ReplyKeyboardRemove())
+            await msg.answer(next_question, reply_markup=kb.bot_registration_kb(),
+                             parse_mode="HTML")
     else:
         try:
             registration_data["telegram_id"] = msg.from_user.id 
@@ -158,10 +129,10 @@ async def process_input(msg: Message, state: FSMContext):
             err_msgs = "\n".join([f"{err['loc'][0]}: {err['msg']}" for err in ve.errors()])
             await msg.answer(f"Some inputs are incorrect:\n{err_msgs}\nLet's try registration again.")
             await state.clear()
-            await state.set_state(Registration.awaiting_input)
+            await state.set_state(RegistrationState.awaiting_input)
             await state.update_data(step=0, registration_data={})
             first_field, first_question = ordered_fields[0]
-            await msg.answer(first_question)
+            await msg.answer(first_question, parse_mode="HTML")
             return
         
         await msg.answer("You have been successfully registered!", reply_markup=kb.menu)
@@ -180,7 +151,7 @@ async def get_events_list(msg: Message):
         event_txt = (
             f"📅 <b>{event.title}</b>\n"
             f"🕐 {event.local_datetime.strftime('%d.%m.%Y at %H:%M')}\n"
-            f"{event.type.capitalize()}\n"
+            f"🏷 {event.type.replace('_', ' ').title()}\n"
             f"📍 {event.location}"
         )
         if event.image_url:
@@ -209,11 +180,11 @@ async def get_users_events(msg: Message):
 
         for event in users_events:
                 event_text = (
-                    f"📅 <b>{event.title}</b>\n"
+                    f"📅 <b>{event.title}</b>\n\n"
                     f"📝 {event.desc}\n"
                     f"🕐 {event.local_datetime.strftime('%d.%m.%Y at %H:%M')}\n"
                     f"📍 {event.location}\n"
-                    f"🏷 {event.type.title()}\n"
+                    f"🏷 {event.type.replace('_', ' ').title()}\n"
                 )
 
                 if event.image_url:
@@ -240,10 +211,11 @@ async def get_users_profile(msg: Message):
         user_profile = (
             f"Name: {user.name}\n"
             f"Surname: {user.surname}\n"
-            f"Occupation: {user.organization}\n"
+            f"Organization: {user.organization}\n"
         )
         await msg.answer(
-            text=user_profile
+            text=user_profile,
+            parse_mode="HTML"
         )
     except Exception as e:
         logger.error(f"Error in the handler: {e}")
@@ -255,30 +227,44 @@ async def show_contacts(msg: Message):
     f"If you've encountered any issues or bugs while using our service, "
     f"please don't hesitate to report them! Your feedback helps us improve.\n\n"
     f"📝 <b>How to report:</b>\n"
-    f"Send a message to our feedback bot: @wituzfeedback_bot \n\n" 
+    f"Send a message to our feedback bot: @womenintechuz_fb_bot \n\n" 
     f"You can send:\n"
     f"• Text descriptions of the problem\n"
-    f"• Screenshots or videos showing the issue\n"
-    f"• Any files that might help us understand the bug\n\n"
+    f"• Screenshots or videos showing the issue\n\n"
     f"We appreciate your help in making our service better! 🙏",
     parse_mode='HTML')
-
-        
+          
 @router.callback_query(F.data.startswith('register_'))
 async def register_user(cb: CallbackQuery, state: FSMContext):
     event_id = int(cb.data.split('_')[1])
     event = await get_event_by_id(event_id)
-    if event.registration_question:
-        await handle_registration_question(cb, event.registration_question)
-        await state.set_state(EventRegistration.waiting_for_answer)
-        await state.update_data(event_id=event_id)
-        return
-    status, msg = await set_registration(int(cb.data.split('_')[1]), cb.from_user.id)
-    if status:
-        updated_kb = await kb.create_registered_button(int(cb.data.split('_')[1]))
-        await cb.message.edit_reply_markup(reply_markup=updated_kb)
-        await cb.answer(msg, show_alert=True)
+    pending_fields = []
+    prompts = {}
+
+    if getattr(event, "requires_email", False):
+        pending_fields.append("email")
+        prompts["email"] = "Please enter your email address (or tap 'Skip')."
+    if getattr(event, "registration_question", None):
+        pending_fields.append("registration_question")
+        prompts["registration_question"] = f"📝 {event.registration_question}\n\nSend your answer, or tap 'Skip'."
+
+    if pending_fields:
+        current_field = pending_fields.pop(0)
+        prompt = prompts[current_field]
+        await cb.message.answer(prompt, reply_markup=await kb.create_skip_button())
+        await state.set_state(EventRegistrationState.waiting_for_answer)
+        await state.update_data(
+            event_id=event_id,
+            pending_fields=pending_fields,
+            prompts=prompts,
+            current_field=current_field,
+            answers={}
+        )
     else:
+        status, msg = await set_registration(event_id, cb.from_user.id)
+        if status:
+            updated_kb = await kb.create_registered_button(event_id)
+            await cb.message.edit_reply_markup(reply_markup=updated_kb)
         await cb.answer(msg, show_alert=True)
         
 @router.callback_query(F.data.startswith('unregister_'))
@@ -305,48 +291,73 @@ async def unregister_user(cb: CallbackQuery):
 async def handle_already_registered(callback: CallbackQuery):
     await callback.answer("You are already registered for this event!", show_alert=True)
     
-@router.callback_query(F.data == "skip_question")
+@router.callback_query(F.data == "skip_field")
 async def handle_skip_question(cb: CallbackQuery, state: FSMContext):
     data = await state.get_data()
+    pending_fields = data.get("pending_fields", [])
+    prompts = data.get("prompts", {})
+    current_field = data.get("current_field")
+    answers = data.get("answers", {})
     event_id = data.get("event_id")
     user_id = cb.from_user.id
 
-    if not event_id:
-        await cb.message.answer("❌ Sorry, event context lost. Please start registration again.")
+    if current_field == "email":
+        answers["email"] = None
+    elif current_field == "registration_question":
+        answers["answer"] = None
+
+    if pending_fields:
+        next_field = pending_fields.pop(0)
+        await cb.message.answer(prompts[next_field], reply_markup=await kb.create_skip_button())
+        await state.update_data(
+            pending_fields=pending_fields,
+            current_field=next_field,
+            answers=answers
+        )
+        await cb.answer()
+    else:
+        reg_email = answers.get("email")
+        reg_answer = answers.get("answer")
+        status, msg_text = await set_registration(event_id, user_id, email=reg_email, answer=reg_answer)
+        await cb.message.answer(msg_text)
         await state.clear()
         await cb.answer()
-        return
-
-    try:
-        status, msg_text = await set_registration(event_id, user_id, answer=None)
-        if not status:
-            await cb.message.answer(f"❌ Registration failed: {msg_text}")
-            return
-        await cb.message.answer("✅ Registration completed (no answer provided).")
-        await state.clear()
-        await cb.answer(msg_text, show_alert=True)
-    except Exception as e:
-        await cb.message.answer(f"Error during registration: {e}")
-        await state.clear()
-        await cb.answer("An error occurred.", show_alert=True)
     
-@router.message(EventRegistration.waiting_for_answer)
-async def handle_registration_answer(msg: Message, state: FSMContext):
-    answer = msg.text.strip() if msg.text else ""
+@router.message(EventRegistrationState.waiting_for_answer)
+async def handle_waiting_for_answer(msg: Message, state: FSMContext):
     data = await state.get_data()
-    event_id = data["event_id"]
+    pending_fields = data.get("pending_fields", [])
+    prompts = data.get("prompts", {})
+    current_field = data.get("current_field")
+    answers = data.get("answers", {})
+    event_id = data.get("event_id")
     user_id = msg.from_user.id
 
-    answer_val = answer if answer else None
-    status, msg_text = await set_registration(event_id, user_id, answer=answer_val)
-    await msg.answer(msg_text)
-    await state.clear()
+    reply = msg.text.strip() if msg.text else ""
+
+    if current_field == "email":
+        try:
+            answers["email"] = validate_email(reply)
+        except ValueError as e:
+            await msg.answer(str(e) + "\nPlease enter a valid email or tap 'Skip'.")
+            return
+    elif current_field == "registration_question":
+        answers["answer"] = reply if reply else None
+
+    if pending_fields:
+        next_field = pending_fields.pop(0)
+        await msg.answer(prompts[next_field], reply_markup=await kb.create_skip_button())
+        await state.update_data(
+            pending_fields=pending_fields,
+            current_field=next_field,
+            answers=answers
+        )
+    else:
+        reg_email = answers.get("email")
+        reg_answer = answers.get("answer")
+        status, msg_text = await set_registration(event_id, user_id, email=reg_email, answer=reg_answer)
+        await msg.answer(msg_text)
+        await state.clear()
     
-async def handle_registration_question(cb: CallbackQuery, question: str):
-    await cb.message.answer(
-        f"📝 <b>{question}</b>\n\nSend your answer, or tap 'Skip'.",
-        reply_markup=await kb.create_skip_button(),
-        parse_mode="HTML"
-    )
-    await cb.answer()
+
     

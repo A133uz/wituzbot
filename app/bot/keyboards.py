@@ -20,13 +20,15 @@ async def create_registration_button(event_id: int, user_id: int) -> InlineKeybo
 
 async def create_skip_button() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="Skip", callback_data="skip_question")
+    kb.button(text="Skip", callback_data="skip_field")
     
     return kb.as_markup()
 
-def contact_request_kb():
+def bot_registration_kb(include_contact: bool = False) -> ReplyKeyboardMarkup:
     kb = ReplyKeyboardBuilder()
-    kb.add(KeyboardButton(text="📱 Share my phone number", request_contact=True))
+    if include_contact:
+        kb.add(KeyboardButton(text="📱 Share my phone number", request_contact=True))
+    kb.add(KeyboardButton(text="I faced a problem"))
     return kb.as_markup(resize_keyboard=True, one_time_keyboard=True)
 
 async def create_registered_button(event_id: int):

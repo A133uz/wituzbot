@@ -56,5 +56,6 @@ test-results/
 
 # Migrations (optional)
 app/migrations/versions/*.py
+*.dump
 
 # Static/media files (if
