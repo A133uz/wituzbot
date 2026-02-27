@@ -202,8 +202,8 @@ async def get_users_profile(msg: Message):
         user = await get_user(user_tg_id)
         user_profile = (
             "👤 <b>Your Profile</b>\n\n"
-            f"📝 <b>Name:</b> {user.name}\n"
-            f"📝 <b>Surname:</b> {user.surname}\n"
+            f"📝 <b>First Name:</b> {user.name}\n"
+            f"📝 <b>Last Name:</b> {user.surname}\n"
             f"🏢 <b>Organization:</b> {user.organization}\n"
         )
         await msg.answer(
