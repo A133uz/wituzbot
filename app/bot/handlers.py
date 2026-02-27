@@ -9,11 +9,11 @@ import asyncio
 import logging
 from pydantic import ValidationError
 from .validators import (validate_email, validate_name_or_surname, 
-                         validate_org, validate_phone
+                         validate_org
                         )
 
 
-from ..database.requests import (set_user, get_user, 
+from ..database.requests import (set_user, get_user, update_user, 
                                  get_events, get_users_events_from_db,
                                  set_registration, remove_registration,
                                  check_user_registration, get_event_by_id)
@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 reg_fields = {
     "name": "What's your first name?\n\n<b>Example:</b> Alisher",
     "surname": "What's your last name?\n\n<b>Example:</b> Valiyev",
-    "phone" : "📱 Please share your phone number using the button below:",
     "organization" : "Where do you work/study?\n\n<b>Example:</b> Amity University"
 }
 
@@ -39,6 +38,9 @@ class RegistrationState(StatesGroup):
     
 class EventRegistrationState(StatesGroup):
     waiting_for_answer = State()
+    
+class ProfileUpdateState(StatesGroup):
+    awaiting_new_value = State()
     
 @router.message(CommandStart())
 async def cmd_start_registration(msg: Message, state: FSMContext):
@@ -65,7 +67,7 @@ async def process_input(msg: Message, state: FSMContext):
         await state.set_state(RegistrationState.awaiting_input)
         await state.update_data(step=0, registration_data={})
         first_field, first_question = ordered_fields[0]
-        await msg.answer(first_question, parse_mode="HTML")
+        await msg.answer(first_question, parse_mode="HTML", reply_markup=kb.bot_registration_kb())
         return
     
     data = await state.get_data()
@@ -74,17 +76,11 @@ async def process_input(msg: Message, state: FSMContext):
     
     field, question = ordered_fields[step]
     
-    if field == "phone":
-        if msg.contact:
-            value = msg.contact.phone_number
-        else:
-            await msg.answer("❌ Please share your contact")
-            return
-    else:
-        if not msg.text:
-            await msg.answer(f"❌ Please enter your {field}.")
-            return
-        value = msg.text.strip()
+
+    if not msg.text:
+        await msg.answer(f"❌ Please enter your {field}.")
+        return
+    value = msg.text.strip()
         
     
                
@@ -92,7 +88,6 @@ async def process_input(msg: Message, state: FSMContext):
         validators = {
             "name": lambda v: validate_name_or_surname(v, "Name"),
             "surname": lambda v: validate_name_or_surname(v, "Surname"),
-            "phone": validate_phone,
             "organization": validate_org
         }
         
@@ -111,11 +106,8 @@ async def process_input(msg: Message, state: FSMContext):
         next_field, next_question = ordered_fields[step+1]
         await state.update_data(step=step+1, registration_data=registration_data)
         
-        if next_field == "phone":
-            await msg.answer(next_question, reply_markup=kb.bot_registration_kb(include_contact=True),
-                             parse_mode="HTML")
-        else:
-            await msg.answer(next_question, reply_markup=kb.bot_registration_kb(),
+
+        await msg.answer(next_question, reply_markup=kb.bot_registration_kb(),
                              parse_mode="HTML")
     else:
         try:
@@ -132,13 +124,13 @@ async def process_input(msg: Message, state: FSMContext):
             await state.set_state(RegistrationState.awaiting_input)
             await state.update_data(step=0, registration_data={})
             first_field, first_question = ordered_fields[0]
-            await msg.answer(first_question, parse_mode="HTML")
+            await msg.answer(first_question, parse_mode="HTML", reply_markup=kb.bot_registration_kb())
             return
         
         await msg.answer("You have been successfully registered!", reply_markup=kb.menu)
         await state.clear()
         
-@router.message(F.text == "Events")
+@router.message(F.text == "📅 Browse Events")
 async def get_events_list(msg: Message):
     user_id = msg.from_user.id
     all_events = await get_events()
@@ -168,14 +160,14 @@ async def get_events_list(msg: Message):
                 parse_mode="HTML"
             )
         
-@router.message(F.text == "My Events")
+@router.message(F.text == "📝 My Registrations")
 async def get_users_events(msg: Message):
     try:
         user_tg_id = msg.from_user.id
         users_events = await get_users_events_from_db(user_tg_id)
 
         if not users_events:
-            await msg.answer("You haven't registered at any event yet")
+            await msg.answer("You haven't registered for any event yet")
             return
 
         for event in users_events:
@@ -203,23 +195,135 @@ async def get_users_events(msg: Message):
         logger.error(f"Error in the handler: {e}")
         await msg.answer("❌ Something went wrong. Please try again later.")
         
-@router.message(F.text == "My Profile")
+@router.message(F.text == "👤 My Profile")
 async def get_users_profile(msg: Message):
     try:
         user_tg_id = msg.from_user.id
         user = await get_user(user_tg_id)
         user_profile = (
-            f"Name: {user.name}\n"
-            f"Surname: {user.surname}\n"
-            f"Organization: {user.organization}\n"
+            "👤 <b>Your Profile</b>\n\n"
+            f"📝 <b>Name:</b> {user.name}\n"
+            f"📝 <b>Surname:</b> {user.surname}\n"
+            f"🏢 <b>Organization:</b> {user.organization}\n"
         )
         await msg.answer(
             text=user_profile,
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=await kb.update_profile_keyboard()
         )
     except Exception as e:
         logger.error(f"Error in the handler: {e}")
-        await msg.answer("Something went wrong. Try again later")
+        await msg.answer("Something went wrong. Try again later",
+                         reply_markup=kb.menu)
+        
+@router.callback_query(F.data == "update_name")
+async def update_first_name(cb: CallbackQuery, state: FSMContext):
+    try:
+        user = await get_user(cb.from_user.id)
+        
+        if not user:
+            await cb.answer("Profile not found", show_alert=True)
+            return
+        
+        await state.set_state(ProfileUpdateState.awaiting_new_value)
+        await state.update_data(field_to_update="name")
+        
+        await cb.message.answer("Please, enter your new first name:",
+                         parse_mode="HTML")
+    except Exception as e:
+        logger.error(f"Error starting name update: {e}")
+        await cb.answer("Something went wrong", show_alert=True)
+
+@router.callback_query(F.data == "update_surname")
+async def update_first_name(cb: CallbackQuery, state: FSMContext):
+    try:
+        user = await get_user(cb.from_user.id)
+        
+        if not user:
+            await cb.answer("Profile not found", show_alert=True)
+            return
+        
+        await state.set_state(ProfileUpdateState.awaiting_new_value)
+        await state.update_data(field_to_update="surname")
+        
+        await cb.message.answer("Please, enter your new last name:",
+                         parse_mode="HTML")
+    except Exception as e:
+        logger.error(f"Error starting name update: {e}")
+        await cb.answer("Something went wrong", show_alert=True)
+        
+@router.callback_query(F.data == "update_org")
+async def update_first_name(cb: CallbackQuery, state: FSMContext):
+    try:
+        user = await get_user(cb.from_user.id)
+        
+        if not user:
+            await cb.answer("Profile not found", show_alert=True)
+            return
+        
+        await state.set_state(ProfileUpdateState.awaiting_new_value)
+        await state.update_data(field_to_update="organization")
+        
+        await cb.message.answer("Please, enter your new organization:",
+                         parse_mode="HTML")
+    except Exception as e:
+        logger.error(f"Error starting name update: {e}")
+        await cb.answer("Something went wrong", show_alert=True)
+        
+@router.message(ProfileUpdateState.awaiting_new_value)
+async def process_new_value(msg: Message, state: FSMContext):
+    data = await state.get_data()
+    field = data.get("field_to_update")
+    new_val = msg.text.strip() if msg.text else ''
+    
+    if not new_val:
+        await msg.answer(
+            "❌ Value cannot be empty. Please try again:"
+        )
+        return
+    
+    try:
+        if field == "name":
+            new_val = validate_name_or_surname(new_val, "Name")
+        elif field == "surname":
+            new_val = validate_name_or_surname(new_val, "Surname")
+        elif field == "organization":
+            new_val = validate_org(new_val)
+        else:
+            await msg.answer("❌ Invalid field. Please start over.")
+            await state.clear()
+            return
+        
+        update_data = {field: new_val}
+        updated_user = await update_user(msg.from_user.id, update_data)
+        
+        if not updated_user:
+            await msg.answer(
+                "❌ Failed to update profile. User not found.",
+                reply_markup=kb.menu
+            )
+            await state.clear()
+            return
+        
+        await msg.answer("Profile data updated successfully!",
+                         parse_mode="HTML")
+        await state.clear()
+    
+    except ValueError as e:
+        # Validation error
+        await msg.answer(
+            f"❌ {str(e)}\n\nPlease try again:",
+        )
+    except Exception as e:
+        logger.error(f"Error updating profile: {e}")
+        await msg.answer(
+            "❌ Something went wrong. Please try again later.",
+            reply_markup=kb.menu
+        )
+        await state.clear()
+    
+    
+    
         
 @router.message(F.text == "Contacts")
 async def show_contacts(msg: Message):

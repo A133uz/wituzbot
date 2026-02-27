@@ -22,15 +22,15 @@ from sqlalchemy.orm import selectinload, Session
 
 from database.database import get_async_db, get_sync_db, get_sync_session
 from .config import AdminSettings
-from database.models import Organizer, Event, Registration, async_main
+from database.models import Organizer, Event, EventReminder, Registration, async_main
 from database.schemas import EventCreate, EventUpdate, OrganizerCreate, OrganizerUpdate, LoginRequest
 from .init_admin import create_initial_superuser
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone, timedelta
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent)) 
-from reminder_system  import schedule_reminder, update_event_and_reschedule, _cancel_reminder
-from datetime import datetime, timedelta, timezone
+from reminder_system  import schedule_reminder, update_reminder, cancel_all_event_reminders
 from typing import Optional
 import logging
 import uvicorn
@@ -73,44 +73,29 @@ security = HTTPBearer(auto_error=False)
 
 s3_service = S3Service()
 
-def schedule_reminder_bg(event_id: int):
+def schedule_reminder_bg(event_id: int, reminder_config: dict):
     """Background task to schedule reminder"""
     try:
         with get_sync_session() as sync_db:
             sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
             if sync_event:
-                task_id = schedule_reminder(sync_event, sync_db)
+                existing_reminder = sync_db.query(EventReminder).filter(
+                    EventReminder.event_id == event_id,
+                    EventReminder.is_sent == False
+                ).first()
+                
+                if existing_reminder:
+                    logger.info(f"Found existing reminder {existing_reminder.id} for event {event_id}, updating...")
+                    task_id = update_reminder(existing_reminder.id, reminder_config, sync_db)
+                else:
+                    task_id = schedule_reminder(sync_event, reminder_config, sync_db)
+                
                 if task_id:
                     logger.info(f"✅ Reminder scheduled for event {event_id}")
                 else:
-                    logger.info(f"ℹ️ No reminder needed for event {event_id} (less than 24h away)")
+                    logger.info(f"ℹ️ No reminder needed for event {event_id}")
     except Exception as e:
         logger.error(f"Failed to schedule reminder for event {event_id}: {e}")
-
-def reschedule_reminder_bg(event_id: int):
-    """Background task to reschedule reminder"""
-    try:
-        with get_sync_session() as sync_db:
-            sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
-            if sync_event:
-                task_id = update_event_and_reschedule(sync_event, sync_db)
-                if task_id:
-                    logger.info(f"✅ Reminder rescheduled for event {event_id}")
-                else:
-                    logger.info(f"ℹ️ No reminder needed for event {event_id} (less than 24h away)")
-    except Exception as e:
-        logger.error(f"Failed to reschedule reminder for event {event_id}: {e}")
-
-def cancel_reminder_bg(event_id: int):
-    """Background task to cancel reminder"""
-    try:
-        with get_sync_session() as sync_db:
-            sync_event = sync_db.query(Event).filter(Event.id == event_id).first()
-            if sync_event:
-                _cancel_reminder(sync_event, sync_db)
-                logger.info(f"✅ Reminder cancelled for event {event_id}")
-    except Exception as e:
-        logger.error(f"Failed to cancel reminder for event {event_id}: {e}")
 
 # Dependency to get current organizer
 def get_current_organizer(request: Request, db: Session = Depends(get_sync_db),
@@ -361,7 +346,12 @@ async def create_event(
 
         logger.info(f"✅ Event saved with date_time: {new_event.date_time}")
         
-        bg_task.add_task(schedule_reminder_bg, new_event.id)
+        reminder_config = {
+            'hours_before': event_data.reminder_hours_before,
+            'message': event_data.reminder_message
+        }
+        
+        bg_task.add_task(schedule_reminder_bg, new_event.id, reminder_config)
     
         return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     
@@ -412,7 +402,7 @@ async def edit_event_form(
 ):
     # Replace with actual database query
     
-    res = await db.execute(select(Event).filter(Event.id == event_id))
+    res = await db.execute(select(Event).options(selectinload(Event.reminders)).filter(Event.id == event_id))
 
     event = res.scalar_one_or_none()
     
@@ -466,7 +456,7 @@ async def edit_event(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         
-        datetime_changed = event.date_time != utc_naive
+        # datetime_changed = event.date_time != utc_naive
         
         event.title = event_data.title
         event.desc = event_data.desc
@@ -487,20 +477,24 @@ async def edit_event(
             
         await db.commit()
         
-        if datetime_changed:
-            bg_task.add_task(reschedule_reminder_bg, event_id)
-        
+        if event_data.reminder_hours_before or event_data.reminder_message is not None:
+            reminder_config = {}
+            if event_data.reminder_hours_before:
+                reminder_config['hours_before'] = event_data.reminder_hours_before
+            if event_data.reminder_message is not None:
+                reminder_config['message'] = event_data.reminder_message
+            
+            bg_task.add_task(schedule_reminder_bg, event_id, reminder_config)
         
         return RedirectResponse(url=f"/events/{event_id}", status_code=status.HTTP_302_FOUND)
     
-    except ValueError:
-        # Handle error - you might want to reload the form with error message
+    except Exception as e:
+        logger.error(f"Update event error: {e}")
         return RedirectResponse(url=f"/events/{event_id}/edit", status_code=status.HTTP_302_FOUND)
 
 @app.post("/events/{event_id}/delete")
 async def delete_event(
     event_id: int,
-    bg_task: BackgroundTasks,
     db: AsyncSession = Depends(get_async_db),
     organizer = Depends(get_current_organizer)
 ):
@@ -512,14 +506,20 @@ async def delete_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    if event.celery_task_id:
-        bg_task.add_task(cancel_reminder_bg, event_id)
-        logger.info(f"🗑️ Scheduling cancellation of reminder for event {event_id}")
+    def cancel_reminders_bg():
+        try:
+            cancel_all_event_reminders(event_id, get_sync_session())
+        except Exception as e:
+            logger.error(f"Failed to cancel reminders for event {event_id}: {e}")
+            
+    cancel_reminders_bg()
         
     s3_service.delete_image(event.image_url)
         
     await db.delete(event)
     await db.commit()
+    
+    logger.info(f"✅ Event {event_id} deleted")
     
     return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
 

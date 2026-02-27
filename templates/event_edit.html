@@ -192,7 +192,117 @@
                         <div class="form-text">Upload, replace, or remove existing image.</div>
                     </div>
 
-                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                    <!-- REMINDER CONFIGURATION SECTION -->
+                    <hr class="my-4">
+                    <h5 class="mb-3">
+                        <i class="fas fa-bell me-2"></i>
+                        Reminder Settings
+                    </h5>
+
+                    {% if event.reminders %}
+                        {% set reminder = event.reminders %}
+                        <div class="alert {% if reminder.is_sent %}alert-success{% else %}alert-info{% endif %}">
+                            <strong><i class="fas fa-info-circle me-2"></i>Current Reminder Status:</strong>
+                            {% if reminder.is_sent %}
+                                ✅ Sent on {{ reminder.sent_at.strftime('%Y-%m-%d %H:%M UTC') }}
+                            {% else %}
+                                ⏳ Scheduled ({{ reminder.hours_before }} hours before event)
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="reminder_hours_before" class="form-label">
+                                Send Reminder
+                            </label>
+                            <select class="form-select" id="reminder_hours_before" name="reminder_hours_before" {% if reminder.is_sent %}disabled{% endif %}>
+                                <option value="1" {% if reminder.hours_before == 1 %}selected{% endif %}>1 hour before</option>
+                                <option value="3" {% if reminder.hours_before == 3 %}selected{% endif %}>3 hours before</option>
+                                <option value="6" {% if reminder.hours_before == 6 %}selected{% endif %}>6 hours before</option>
+                                <option value="12" {% if reminder.hours_before == 12 %}selected{% endif %}>12 hours before</option>
+                                <option value="24" {% if reminder.hours_before == 24 %}selected{% endif %}>24 hours before</option>
+                                <option value="48" {% if reminder.hours_before == 48 %}selected{% endif %}>2 days before</option>
+                            </select>
+                            {% if reminder.is_sent %}
+                            <div class="form-text text-warning">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                Reminder already sent. Changes will not affect this event.
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="reminder_message" class="form-label">
+                                Custom Reminder Message
+                            </label>
+                            <textarea 
+                                class="form-control" 
+                                id="reminder_message" 
+                                name="reminder_message" 
+                                rows="6"
+                                maxlength="4000"
+                                {% if reminder.is_sent %}disabled{% endif %}
+                            >{{ reminder.message or '' }}</textarea>
+                            {% if reminder.is_sent %}
+                            <div class="form-text text-warning">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                Reminder already sent. Message cannot be changed.
+                            </div>
+                            {% else %}
+                            <div class="form-text">
+                                Leave empty to use default message. HTML formatting is supported.
+                            </div>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-circle me-2"></i>
+                            No reminder configured for this event.
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="reminder_hours_before" class="form-label">
+                                Send Reminder
+                            </label>
+                            <select class="form-select" id="reminder_hours_before" name="reminder_hours_before">
+                                <option value="24" selected>24 hours before (default)</option>
+                                <option value="1">1 hour before</option>
+                                <option value="3">3 hours before</option>
+                                <option value="6">6 hours before</option>
+                                <option value="12">12 hours before</option>
+                                <option value="48">2 days before</option>
+                                <option value="72">3 days before</option>
+                                <option value="168">1 week before</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="reminder_message" class="form-label">
+                                Custom Reminder Message (Optional)
+                            </label>
+                            <textarea 
+                                class="form-control" 
+                                id="reminder_message" 
+                                name="reminder_message" 
+                                rows="6"
+                                maxlength="4000"
+                                placeholder="Leave empty for default message..."
+                            ></textarea>
+                            <div class="form-text">
+                                HTML formatting is supported: &lt;b&gt;bold&lt;/b&gt;, &lt;i&gt;italic&lt;/i&gt;
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <!-- Live Preview -->
+                    {% if not (event.reminders and event.reminders.is_sent) %}
+                    <div id="reminderPreview" class="alert alert-secondary" style="display: none;">
+                        <strong><i class="fas fa-eye me-2"></i>Live Preview:</strong>
+                        <hr>
+                        <div id="previewContent"></div>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
                         <a href="/events/{{ event.id }}" class="btn btn-outline-secondary me-md-2">Cancel</a>
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-save me-2"></i>
@@ -224,6 +334,10 @@
                         <i class="fas fa-info-circle text-info me-2"></i>
                         Date and time changes may affect attendance
                     </li>
+                    <li class="mb-2">
+                        <i class="fas fa-info-circle text-info me-2"></i>
+                        Reminder settings can be updated before sending
+                    </li>
                 </ul>
             </div>
         </div>
@@ -243,21 +357,8 @@
                     <li class="mb-1">• Type: must be selected</li>
                     <li class="mb-1">• Location: 3-100 characters</li>
                     <li class="mb-1">• Time: 24-hour format (HH:MM)</li>
+                    <li class="mb-1">• Reminder message: max 4000 characters</li>
                 </ul>
-            </div>
-        </div>
-        
-        <div class="card mt-3">
-            <div class="card-body">
-                <h6 class="card-title">
-                    <i class="fas fa-bell me-2"></i>
-                    Notify Participants
-                </h6>
-                <p class="text-muted small">Send an email notification about the changes to all registered participants.</p>
-                <button class="btn btn-outline-primary btn-sm w-100" onclick="notifyParticipants()">
-                    <i class="fas fa-paper-plane me-2"></i>
-                    Send Notification
-                </button>
             </div>
         </div>
     </div>
@@ -274,11 +375,20 @@ function deleteEvent(eventId) {
     }
 }
 
-function notifyParticipants() {
-    if (confirm('Send notification email to all registered participants?')) {
-        // Implementation would go here
-        alert('Notification functionality would be implemented here');
-    }
+// Preview reminder message
+const reminderTextarea = document.getElementById('reminder_message');
+const previewDiv = document.getElementById('reminderPreview');
+const previewContent = document.getElementById('previewContent');
+
+if (reminderTextarea && !reminderTextarea.disabled) {
+    reminderTextarea.addEventListener('input', function() {
+        if (this.value.trim()) {
+            previewDiv.style.display = 'block';
+            previewContent.innerHTML = this.value;
+        } else {
+            previewDiv.style.display = 'none';
+        }
+    });
 }
 
 // Form validation

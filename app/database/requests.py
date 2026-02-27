@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import logging
 
 from .database import get_session
-from .schemas import UserCreate, RegistrationCreate
+from .schemas import UserCreate, RegistrationCreate, UserUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,38 @@ async def set_user(reg_data: Dict):
 async def get_user(tg_id):
     async with get_session() as session:
         user = await session.scalar(select(User).where(User.telegram_id == tg_id))
+        return user
+    
+async def update_user(telegram_id: int, update_data: Dict) -> Optional[User]:
+    """
+    Update user profile
+    
+    Args:
+        telegram_id: User's Telegram ID
+        update_data: Dictionary with fields to update (e.g., {'name': 'New Name'})
+    
+    Returns:
+        Updated User object or None if user not found
+    """
+    async with get_session() as session:
+        # Get the user
+        user = await session.scalar(
+            select(User).where(User.telegram_id == telegram_id)
+        )
+        
+        if not user:
+            return None
+        
+        # Validate update data with schema
+        user_update_schema = UserUpdate(**update_data)
+        
+        # Update only provided fields
+        update_dict = user_update_schema.model_dump(exclude_unset=True)
+        for field, value in update_dict.items():
+            setattr(user, field, value)
+        
+        await session.commit()
+        await session.refresh(user)
         return user
     
 async def get_events():

@@ -5,8 +5,8 @@ from ..database.requests import check_user_registration
 
 
 menu = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="Events"), KeyboardButton(text='My Events')],
-    [KeyboardButton(text='My Profile'), KeyboardButton(text='Contacts')],
+    [KeyboardButton(text="📅 Browse Events"), KeyboardButton(text="📝 My Registrations")],
+    [KeyboardButton(text="👤 My Profile"), KeyboardButton(text='Contacts')],
 ],  resize_keyboard=True)
 
 async def create_registration_button(event_id: int, user_id: int) -> InlineKeyboardMarkup:
@@ -24,10 +24,8 @@ async def create_skip_button() -> InlineKeyboardMarkup:
     
     return kb.as_markup()
 
-def bot_registration_kb(include_contact: bool = False) -> ReplyKeyboardMarkup:
+def bot_registration_kb() -> ReplyKeyboardMarkup:
     kb = ReplyKeyboardBuilder()
-    if include_contact:
-        kb.add(KeyboardButton(text="📱 Share my phone number", request_contact=True))
     kb.add(KeyboardButton(text="I faced a problem"))
     return kb.as_markup(resize_keyboard=True, one_time_keyboard=True)
 
@@ -43,6 +41,24 @@ async def create_registered_button(event_id: int):
 
     kb.adjust(2) 
     return kb.as_markup()
+
+async def update_profile_keyboard():
+    kb = InlineKeyboardBuilder()
+    kb.add(InlineKeyboardButton(
+        text="Update First Name", 
+        callback_data="update_name"
+    ))
+    kb.add(InlineKeyboardButton(
+        text="Update Last Name", 
+        callback_data="update_surname"
+    ))
+    kb.add(InlineKeyboardButton(
+        text="Update Organization", 
+        callback_data="update_org"
+    ))
+    kb.adjust(1)
+    return kb.as_markup()
+    
 
 
     

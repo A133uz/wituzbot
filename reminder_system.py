@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from app.database.config import DatabaseSettings
 from app.bot.config import MainBotSettings
 from app.database.database import get_sync_session
-from app.database.models import Event
+from app.database.models import Event, EventReminder, Registration
+
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -32,216 +34,297 @@ celery_app.conf.update(
     worker_concurrency=10,
 )
 
+BATCH_SIZE = 50
 
-    
-# @celery_app.on_after_configure.connect
-# def setup_periodic_tasks(sender, **kwargs):
-#     # Check every minute for reminders that need to be sent
-#     sender.add_periodic_task(
-#         60.0,  # Every 60 seconds
-#         check_pending_reminders.s(),
-#         name='check for pending reminders'
-#     )
-
-# @celery_app.task
-# def check_pending_reminders():
-#     """Periodic task that checks if any reminders need to be sent"""
-#     logging.info("🔍 Checking for pending reminders...")
-#     
-#     try:
-#         with get_sync_session() as db:
-#             now = datetime.now(timezone.utc)
-#             logging.info(f"Current time (UTC): {now.strftime('%Y-%m-%d %H:%M:%S')}")
-#             
-#             
-#             events = db.query(Event).filter(
-#                 Event.reminder_sent == False,
-#                 Event.celery_task_id != None  
-#             ).all()
-#             
-#             logging.info(f"Found {len(events)} events to check")
-#             
-#             for event in events:
-#                 logging.info(f"\n--- Checking Event {event.id}: {event.title} ---")
-#                 
-#                 
-#                 event_dt = event.date_time
-#                 logging.info(f"Event datetime (raw): {event_dt} (tzinfo: {event_dt.tzinfo})")
-#                 
-#                 if event_dt.tzinfo is None:
-#                     event_dt = event_dt.replace(tzinfo=timezone.utc)
-#                     logging.info(f"Added UTC timezone: {event_dt}")
-#                 
-#                 
-#                 if event_dt <= now:
-#                     logging.info(f"❌ Event {event.id} is in the past, skipping")
-#                     continue
-#                 
-#                 logging.info(f"Event time: {event_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-#                 
-#                 
-#                 reminder_time = event_dt - timedelta(hours=24)
-#                 logging.info(f"Reminder should fire at: {reminder_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-#                 
-#                 time_diff = reminder_time - now
-#                 logging.info(f"Time until reminder: {time_diff}")
-#                 
-#                 
-#                 grace_period_start = now - timedelta(minutes=2)
-#                 
-#                 logging.info(f"Checking: {reminder_time} <= {now} and {reminder_time} > {grace_period_start}")
-#                 
-#                 if reminder_time <= now and reminder_time > grace_period_start:
-#                     logging.info(f"🔔 ✅ TIME TO SEND! Triggering reminder for event {event.id}!")
-#                     send_reminder_task.delay(event.id)
-#                 else:
-#                     if reminder_time > now:
-#                         logging.info(f"⏳ Too early - reminder in {time_diff}")
-#                     else:
-#                         logging.info(f"⏰ Too late - reminder was {abs(time_diff)} ago")
-#             
-#             logging.info(f"\n✅ Check complete. Checked {len(events)} events.")
-#             
-#     except Exception as e:
-#         logging.error(f"❌ Error checking reminders: {str(e)}")
-#         import traceback
-#         logging.error(traceback.format_exc())
 
 @celery_app.task(bind=True, max_retries=3)
-def send_reminder_task(self, event_id: int):
+def send_reminder_task(self, reminder_id: int):
     """Send reminder for an event"""
-    logging.info(f"🔥 EXECUTING REMINDER TASK for event {event_id}")
+    logging.info(f"🔥 EXECUTING REMINDER TASK for event")
     
     db = None
     try:
         with get_sync_session() as db:
-            event = db.query(Event).filter(Event.id == event_id).first()
+            reminder = db.query(EventReminder).filter(EventReminder.id == reminder_id).first()
             
-            if not event:
-                logging.error(f"Event {event_id} not found")
-                return f"Event {event_id} not found"
+            if not reminder:
+                logging.error(f"Reminder {reminder_id} not found")
+                return f"Reminder {reminder_id} not found"
             
-            if event.reminder_sent:
-                logging.info(f"Reminder for event {event_id} already sent")
-                return f"Reminder already sent for event {event_id}"
+            if reminder.is_sent:
+                logging.info(f"Reminder {reminder_id} already sent")
+                return f"Reminder {reminder_id} already sent"
+            
+            event = reminder.event
             
             event_dt = event.date_time
             if event_dt.tzinfo is None:
                 event_dt = event_dt.replace(tzinfo=timezone.utc)
             
-            # Check if event is still in the future (safety check)
             now_utc = datetime.now(timezone.utc)
             if event_dt <= now_utc:
-                logging.warning(f"Event {event_id} is in the past, skipping reminder")
-                return f"Event {event_id} is in the past"
+                logging.warning(f"Event {event.id} is in the past, skipping reminder")
+                return f"Event {event.id} is in the past"
             
-            # Send the reminder automatically
-            success = asyncio.run(send_telegram_reminder(event))
+            registrations = db.query(Registration).filter(
+                Registration.event_id == event.id
+            ).all()
             
-            if success:
-                # Mark reminder as sent
-                event.reminder_sent = True
+            if not registrations:
+                logging.info(f"No registrations for event {event.id}, skipping reminder")
+                reminder.is_sent = True
                 db.commit()
-                logging.info(f"✅ Automatic reminder sent for event {event_id}: '{event.title}'")
-                return f"Reminder sent for event {event_id}"
-            else:
-                # Retry if sending failed
-                db.rollback()
-                raise Exception("Failed to send telegram message")
+                return f"No registrations for event {event.id}"
+            
+            user_ids = [reg.user_id for reg in registrations]
+            
+            total_sent = 0
+            total_failed = 0
+            
+            for i in range(0, len(user_ids), BATCH_SIZE):
+                batch = user_ids[i:i+BATCH_SIZE]
+                
+                try:
+                    sent, failed = asyncio.run(
+                        send_reminder_batch(event, reminder, batch)
+                    )
+                    total_sent += sent
+                    total_failed += failed
+                    
+                    logging.info(
+                        f"Batch {i//BATCH_SIZE + 1}: "
+                        f"sent {sent}, failed {failed}"
+                    )
+                    
+                except Exception as e:
+                    logging.error(f"Failed to send batch: {e}")
+                    total_failed += len(batch) 
+                                      
+            reminder.is_sent = True
+            db.commit()
+            
+            logging.info(
+                f"✅ Reminder {reminder_id} completed: "
+                f"sent {total_sent}, failed {total_failed}"
+            )
+            
+            return f"Reminder sent: {total_sent} success, {total_failed} failed"
         
     except Exception as exc:
-        logging.error(f"❌ Reminder task failed for event {event_id}: {str(exc)}")
+        logging.error(f"❌ Reminder task failed for reminder {reminder_id}: {str(exc)}")
         if db:
             db.rollback()
         
         # Retry with exponential backoff
         raise self.retry(
-            exc=exc, 
+            exc=exc,
             countdown=min(300 * (2 ** self.request.retries), 3600),
             max_retries=3
         )
 
-async def send_telegram_reminder(event: Event):
-    """Send reminder message via Telegram"""
+async def send_reminder_batch(event: Event, reminder: EventReminder, user_ids: List[int]) -> tuple:
+    """
+    Send reminder to a batch of users
+    
+    Returns:
+        Tuple of (successful_count, failed_count)
+    """
+    from aiogram import Bot
+    
     try:
-        from aiogram import Bot
         bot = Bot(token=bot_settings.TG_TOKEN)
         
-        
-        # Format reminder message
+        hours_before = reminder.hours_before
         message = f"🔔 <b>Event Reminder!</b>\n\n"
         message += f"📝 <b>{event.title}</b>\n"
-        message += f"📅 <b>Tomorrow:</b> {event.local_datetime.strftime('%Y-%m-%d at %H:%M')}\n\n"
+        message += f"📅 <b>Starting at </b> {event.date_time.strftime('%Y-%m-%d at %H:%M')}\n\n" 
         
-        if event.desc:
+        if reminder.message:
+            message += reminder.message + "\n"
+        else:
             message += f"📄 <b>Description:</b>\n{event.desc}\n\n"
         
-        message += f"⏰ <i>This event starts in approximately 24 hours!</i>"
         
-        # Send message via bot
-        for reg in event.registrations:
-            await bot.send_message(
-                chat_id=reg.user_id,
-                text=message,
-                parse_mode="HTML"
-            )
+        if event.location:
+            message += f"📍 <b>Location:</b> {event.location}\n" 
         
-        return True
+        message += f"⏰ <i>This event starts in approximately {hours_before} {"hour" if hours_before == 1 else "hours" }!</i>"  
         
+        sent_count = 0
+        failed_count = 0
+        for user_id in user_ids:
+            try:
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=message,
+                    parse_mode="HTML"
+                )
+                sent_count += 1
+                
+            except Exception as e:
+                logging.error(f"Failed to send reminder to user {user_id}: {e}")
+                failed_count += 1
+        
+        await bot.session.close()
+        
+        return sent_count, failed_count
+    
     except Exception as e:
-        logging.error(f"Failed to send telegram message: {str(e)}")
+        logging.error(f"Failed to send reminder batch: {str(e)}")
         import traceback
         logging.error(traceback.format_exc())
-        return False
+        return 0, len(user_ids)
+            
     
-def schedule_reminder(event: Event, db: Session):
+def schedule_reminder(event: Event, reminder_config: dict, db: Session) -> str:
+    """
+    Schedule a reminder for an event
+    
+    Args:
+        event: Event object
+        reminder_config: Dict with 'hours_before' and optional 'message'
+        db: Database session
+    
+    Returns:
+        Celery task ID
+    """
     event_dt = event.date_time
     if event_dt.tzinfo is None:
         event_dt = event_dt.replace(tzinfo=timezone.utc)
         
-    reminder_dt = event_dt - timedelta(hours=24)
+    hours_before = reminder_config.get('hours_before', 24)
+    custom_message = reminder_config.get('message')
+        
+    reminder_dt = event_dt - timedelta(hours=hours_before)
     now_utc = datetime.now(timezone.utc)
     
     if reminder_dt < now_utc:
-        logging.info(f"Event {event.id} is less than 24 hours away - no reminder scheduled")
-        event.celery_task_id = None
-        event.reminder_sent = False
-        db.commit()
+        logging.info(f"Event {event.id} is less than {hours_before} {"hour" if hours_before > 1 else "hours"} away - no reminder scheduled")
         return None
     
+    reminder = EventReminder(
+        event_id=event.id,
+        hours_before=hours_before,
+        message=custom_message,
+        is_sent=False
+    )
+    
+    db.add(reminder)
+    db.flush()
+    
     result = send_reminder_task.apply_async(
-        args=[event.id],
+        args=[reminder.id],
         eta=reminder_dt
     )
     
-    event.celery_task_id = result.id
-    event.reminder_sent = False
+    reminder.celery_task_id = result.id
     db.commit()
     
-    logging.info(
-        f"🕐 Reminder scheduled for event {event.id} '{event.title}' "
+    logger.info(
+        f"🕐 Reminder {reminder.id} scheduled for event {event.id} '{event.title}' "
         f"at {reminder_dt.strftime('%Y-%m-%d %H:%M:%S UTC')} "
+        f"({hours_before} hours before event) "
         f"(task_id: {result.id})"
     )
     
     return result.id
         
 
-def update_event_and_reschedule(event: Event, db: Session):
-    """Update event and reschedule reminder"""
-    _cancel_reminder(event, db)
+def update_reminder(reminder_id: int, reminder_config: dict, db: Session) -> str:
+    """
+    Update an existing reminder
     
-    return schedule_reminder(event, db)
-
-def _cancel_reminder(event: Event, db: Session):
-    """Cancel existing reminder"""
-    if event.celery_task_id and not event.celery_task_id.startswith("scheduled_"):
+    Args:
+        reminder_id: EventReminder ID
+        reminder_config: Dict with optional 'hours_before' and 'message'
+        db: Database session
+    
+    Returns:
+        New Celery task ID
+    """
+    reminder = db.query(EventReminder).filter(EventReminder.id == reminder_id).first()
+    
+    if not reminder:
+        raise ValueError(f"Reminder {reminder_id} not found")
+    
+    if reminder.is_sent:
+        logger.warning(f"Reminder {reminder_id} already sent, cannot update")
+        return None
+    
+    if reminder.celery_task_id:
         try:
-            AsyncResult(event.celery_task_id).revoke()
-            logging.info(f"❌ Cancelled reminder for event {event.id} (task_id: {event.celery_task_id})")
+            from celery.result import AsyncResult
+            AsyncResult(reminder.celery_task_id).revoke()
+            logger.info(f"❌ Cancelled reminder task {reminder.celery_task_id}")
         except Exception as e:
-            logging.warning(f"Failed to revoke task {event.celery_task_id}: {e}")
-        
-        event.celery_task_id = None
-        event.reminder_sent = False
+            logger.warning(f"Failed to revoke task {reminder.celery_task_id}: {e}")
+    
+    # Update reminder config
+    if 'hours_before' in reminder_config:
+        reminder.hours_before = reminder_config['hours_before']
+    if 'message' in reminder_config:
+        reminder.message = reminder_config['message']
+    
+    event = reminder.event
+    event_dt = event.date_time
+    if event_dt.tzinfo is None:
+        event_dt = event_dt.replace(tzinfo=timezone.utc)
+    
+    reminder_dt = event_dt - timedelta(hours=reminder.hours_before)
+    now_utc = datetime.now(timezone.utc)
+    
+    if reminder_dt < now_utc:
+        logger.info(f"Reminder {reminder_id} time has passed, not rescheduling")
+        reminder.celery_task_id = None
         db.commit()
+        return None
+    
+    # Reschedule with new time
+    result = send_reminder_task.apply_async(
+        args=[reminder.id],
+        eta=reminder_dt
+    )
+    
+    reminder.celery_task_id = result.id
+    db.commit()
+    
+    logger.info(
+        f"🔄 Reminder {reminder_id} rescheduled "
+        f"at {reminder_dt.strftime('%Y-%m-%d %H:%M:%S UTC')} "
+        f"(task_id: {result.id})"
+    )
+    
+    return result.id
+
+def _cancel_reminder(reminder_id: int, db: Session):
+    """Cancel a scheduled reminder"""
+    reminder = db.query(EventReminder).filter(EventReminder.id == reminder_id).first()
+    
+    if not reminder:
+        logger.warning(f"Reminder {reminder_id} not found")
+        return
+    
+    if reminder.is_sent:
+        logger.info(f"Reminder {reminder_id} already sent, nothing to cancel")
+        return
+    
+    if reminder.celery_task_id:
+        try:
+            from celery.result import AsyncResult
+            AsyncResult(reminder.celery_task_id).revoke()
+            logger.info(f"❌ Cancelled reminder {reminder_id} (task_id: {reminder.celery_task_id})")
+        except Exception as e:
+            logger.warning(f"Failed to revoke task {reminder.celery_task_id}: {e}")
+    
+    db.delete(reminder)
+    db.commit()
+    
+def cancel_all_event_reminders(event_id: int, db: Session):
+    """Cancel all reminders for an event"""
+    reminders = db.query(EventReminder).filter(
+        EventReminder.event_id == event_id,
+        EventReminder.is_sent == False
+    ).all()
+    
+    for reminder in reminders:
+        _cancel_reminder(reminder.id, db)

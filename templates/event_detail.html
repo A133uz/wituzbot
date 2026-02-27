@@ -143,14 +143,12 @@
                         {% if event.requires_email %}
                         <th>Email</th>
                         {% endif %}
-                        <th>Phone Number</th>
                         <th>Organization</th>
                         <th>Telegram Username</th>
                         {% if event.registration_question %}
                         <th>Answer</th>
                         {% endif %}
-                        <th>Registration Date</th>
-                        
+                        <th>Registration Date</th> 
                     </tr>
                 </thead>
                 <tbody>
@@ -174,7 +172,6 @@
                             </a>
                         </td>
                         {% endif %}
-                        <td>{{ registration.user.phone }}</td>
                         <td>{{ registration.user.organization }}</td>
                         <td>{{ registration.user.telegram_username }}</td>
                         {% if event.registration_question %}

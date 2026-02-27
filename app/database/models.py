@@ -1,4 +1,4 @@
-from sqlalchemy import (String, BigInteger, 
+from sqlalchemy import (String, BigInteger, Integer,
                         ForeignKey, 
                         DateTime,TIMESTAMP,
                         Text, UniqueConstraint,
@@ -28,7 +28,6 @@ class User(Base):
     
     name: Mapped[str_25] 
     surname: Mapped[str_25]
-    phone: Mapped[str] = mapped_column(String(20), nullable=False)
     organization: Mapped[str_100] 
     
     registrations: Mapped[List["Registration"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -63,13 +62,13 @@ class Event(Base):
     registration_question: Mapped[str] = mapped_column(String(255), nullable=True)
     requires_email: Mapped[bool] = mapped_column(Boolean, default=False)
     
-    celery_task_id = mapped_column(String(255), nullable=True)
-    reminder_sent: Mapped[Boolean] = mapped_column(Boolean, default=False)
+
     
     organizer_id: Mapped[int] = mapped_column(ForeignKey("organizers.id"))
     
     #Relationships
     organizer: Mapped["Organizer"] = relationship(back_populates="events")
+    reminders: Mapped["EventReminder"] = relationship(back_populates="event", cascade="all, delete-orphan")
     registrations: Mapped[List["Registration"]] = relationship(back_populates="event", cascade="all, delete-orphan")
     
     @property
@@ -84,6 +83,25 @@ class Event(Base):
             
         local_tz = pytz.timezone('Asia/Tashkent')
         return dt.astimezone(local_tz)
+    
+class EventReminder(Base):
+    __tablename__ = "event_reminders"
+    
+    id : Mapped[int] = mapped_column(primary_key=True, autoincrement=True, index=True)
+    event_id = mapped_column(ForeignKey("events.id"))
+    
+    hours_before: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
+    message: Mapped[str] = mapped_column(Text(), nullable=True)
+    
+    celery_task_id = mapped_column(String(255), nullable=True)
+    is_sent: Mapped[Boolean] = mapped_column(Boolean, default=False)
+    
+    event: Mapped["Event"] = relationship(back_populates="reminders")
+    
+    __table_args__ = (
+        Index('idx_event_reminder_scheduling', 'event_id', 'is_sent'),
+    )
+    
     
    
     

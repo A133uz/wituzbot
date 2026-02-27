@@ -19,7 +19,6 @@ class UserBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=25, description="User's first name")
     surname: str = Field(..., min_length=1, max_length=25, description="User's surname")
     organization: str = Field(..., min_length=1, max_length=100, description="User's organization/workplace")
-    phone: str = Field(..., description="User's phone number in international format")
     telegram_username: Optional[str] = Field(None, description="Telegram username")
 
     @field_validator('name', 'surname', 'organization')
@@ -42,21 +41,6 @@ class UserBase(BaseModel):
             raise ValueError('Name can only contain letters, spaces, hyphens, apostrophes, and periods')
         return v
     
-    @field_validator('phone')
-    @classmethod
-    def validate_phone_format(cls, v: str) -> str:
-        """Validate phone number format"""
-        import phonenumbers
-        from phonenumbers import NumberParseException
-        
-        v = v.strip()
-        try:
-            parsed = phonenumbers.parse(v, None)
-            if not phonenumbers.is_valid_number(parsed):
-                raise ValueError('Invalid phone number')
-            return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
-        except NumberParseException:
-            raise ValueError('Phone number must be in international format')
 
 
 class UserCreate(UserBase):
@@ -69,7 +53,7 @@ class UserCreate(UserBase):
         """Validate telegram_id is within reasonable bounds"""
         if v <= 0:
             raise ValueError('Telegram ID must be positive')
-        if v > 9999999999:  # Max reasonable Telegram ID
+        if v > 9999999999:  
             raise ValueError('Invalid Telegram ID')
         return v
 
@@ -78,9 +62,7 @@ class UserUpdate(BaseModel):
     """Schema for updating user information"""
     name: Optional[str] = Field(None, min_length=1, max_length=25)
     surname: Optional[str] = Field(None, min_length=1, max_length=25)
-    phone: Optional[str] = Field(None, description="Phone number")
     organization: Optional[str] = Field(None, min_length=1, max_length=100)
-    telegram_username: Optional[str] = Field(None, description="Telegram username")
 
     @field_validator('name', 'surname', 'organization')
     @classmethod
@@ -93,21 +75,6 @@ class UserUpdate(BaseModel):
             return stripped
         return v
     
-    @field_validator('phone')
-    @classmethod
-    def validate_phone_format(cls, v: str) -> str:
-        """Validate phone number format"""
-        import phonenumbers
-        from phonenumbers import NumberParseException
-        
-        v = v.strip()
-        try:
-            parsed = phonenumbers.parse(v, None)
-            if not phonenumbers.is_valid_number(parsed):
-                raise ValueError('Invalid phone number')
-            return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
-        except NumberParseException:
-            raise ValueError('Phone number must be in international format')
 
 
 class UserResponse(UserBase):
@@ -231,6 +198,39 @@ class OrganizerWithEvents(OrganizerResponse):
     
 # Event Schemas
 
+class EventReminderBase(BaseModel):
+    """Base reminder schema"""
+    hours_before: int = Field(default=24, ge=1, le=24)
+    message: Optional[str] = Field(None, max_length=4096)
+
+    @field_validator('hours_before')
+    @classmethod
+    def validate_hours(cls, v: int) -> int:
+        if v < 1 or v > 24:
+            raise ValueError('Reminder must be between 1 and 24 hours before event')
+        return v
+
+
+class EventReminderCreate(EventReminderBase):
+    """Schema for creating a reminder"""
+    event_id: int = Field(...)
+
+
+class EventReminderUpdate(BaseModel):
+    """Schema for updating a reminder"""
+    hours_before: Optional[int] = Field(..., ge=1, le=24)
+    message: Optional[str] = Field(..., max_length=4096)
+
+
+class EventReminderResponse(EventReminderBase):
+    """Schema for reminder response"""
+    id: int
+    event_id: int
+    celery_task_id: Optional[str] = None
+    is_sent: bool = False
+
+    model_config = {"from_attributes": True}
+
 class EventBase(BaseModel):
     """Base event schema with common fields"""
     title: str = Field(..., min_length=3, max_length=100, description="Event title")
@@ -254,6 +254,9 @@ class EventCreate(EventBase):
     time: str = Field(..., pattern=r'^\d{2}:\d{2}$', description="Event time (HH:MM in 24-hour format)")
     registration_question: Optional[str] = Field(None, description="Optional registration question")
     requires_email: bool = Field(False, description="Optional email field")
+    
+    reminder_hours_before: int = Field(default=24, ge=1, le=24)
+    reminder_message: Optional[str] = Field(..., max_length=4096)
 
     @field_validator('date')
     @classmethod
@@ -287,6 +290,9 @@ class EventUpdate(EventBase):
     registration_question: Optional[str] = None
     requires_email: bool = False
 
+    reminder_hours_before: Optional[int] = Field(..., ge=1, le=24)
+    reminder_message: Optional[str] = Field(..., max_length=4000)
+    
     @field_validator('date')
     @classmethod
     def validate_date_format(cls, v: str) -> str:
@@ -313,11 +319,15 @@ class EventResponse(EventBase):
     id: int
     date_time: datetime
     organizer_id: int
-    celery_task_id: Optional[str] = None
-    reminder_sent: bool = False
     image_url: Optional[str] = None
     registration_question: Optional[str] = None
     requires_email: bool = False
+
+    model_config = {"from_attributes": True}
+    
+class EventWithReminders(EventResponse):
+    """Schema for event with reminders"""
+    reminders: List[EventReminderResponse] = []
 
     model_config = {"from_attributes": True}
 
@@ -502,6 +512,8 @@ UserWithRegistrations.model_rebuild()
 OrganizerWithEvents.model_rebuild()
 EventWithRegistrations.model_rebuild()
 EventWithOrganizer.model_rebuild()
+EventWithReminders.model_rebuild()
+EventWithRegistrations.model_rebuild()
 RegistrationWithUser.model_rebuild()
 RegistrationWithEvent.model_rebuild()
 RegistrationWithDetails.model_rebuild()
