@@ -214,13 +214,15 @@
                             <label for="reminder_hours_before" class="form-label">
                                 Send Reminder
                             </label>
+                                {% if reminder.is_sent %}
+                                    <input type="hidden" name="reminder_hours_before" value="{{ reminder.hours_before }}">
+                                {% endif %}
                             <select class="form-select" id="reminder_hours_before" name="reminder_hours_before" {% if reminder.is_sent %}disabled{% endif %}>
                                 <option value="1" {% if reminder.hours_before == 1 %}selected{% endif %}>1 hour before</option>
                                 <option value="3" {% if reminder.hours_before == 3 %}selected{% endif %}>3 hours before</option>
                                 <option value="6" {% if reminder.hours_before == 6 %}selected{% endif %}>6 hours before</option>
                                 <option value="12" {% if reminder.hours_before == 12 %}selected{% endif %}>12 hours before</option>
                                 <option value="24" {% if reminder.hours_before == 24 %}selected{% endif %}>24 hours before</option>
-                                <option value="48" {% if reminder.hours_before == 48 %}selected{% endif %}>2 days before</option>
                             </select>
                             {% if reminder.is_sent %}
                             <div class="form-text text-warning">
@@ -234,6 +236,9 @@
                             <label for="reminder_message" class="form-label">
                                 Custom Reminder Message
                             </label>
+                                {% if reminder.is_sent %}
+                                    <input type="hidden" name="reminder_message" value="{{ reminder.message or '' }}">
+                                {% endif %}
                             <textarea 
                                 class="form-control" 
                                 id="reminder_message" 
