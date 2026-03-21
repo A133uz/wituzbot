@@ -7,10 +7,10 @@ from contextlib import asynccontextmanager, contextmanager
 
 settings = DatabaseSettings()
 
-as_engine = create_async_engine(url=settings.DATABASE_URL_asyncpg, echo=True) #TODO: have to change to pg for prod
+as_engine = create_async_engine(url=settings.DATABASE_URL_asyncpg, echo=True) 
 s_engine = create_engine(url=settings.DATABASE_URL_syncpg, echo=True)
 
-async_session = async_sessionmaker(as_engine, class_=AsyncSession, expire_on_commit=False)
+async_session = async_sessionmaker(as_engine, class_=AsyncSession)
 sync_session = sessionmaker(s_engine, class_=Session, expire_on_commit=False)
 
 str_100 = Annotated[str, 100]
@@ -31,7 +31,12 @@ class Base(AsyncAttrs, DeclarativeBase):
     
 async def get_async_db():
     async with async_session() as session:
-        yield session
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
         
                 
 def get_sync_db():

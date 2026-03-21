@@ -98,7 +98,7 @@ def schedule_reminder_bg(event_id: int, reminder_config: dict):
         logger.error(f"Failed to schedule reminder for event {event_id}: {e}")
 
 # Dependency to get current organizer
-def get_current_organizer(request: Request, db: Session = Depends(get_sync_db),
+async def get_current_organizer(request: Request, db: Session = Depends(get_async_db),
                           creds: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Organizer:
     
     token = request.cookies.get("access_token")
@@ -121,14 +121,17 @@ def get_current_organizer(request: Request, db: Session = Depends(get_sync_db),
             detail="Invalid or expired token"
         )
     
-    organizer_id = payload.get("sub")
+    organizer_id = int(payload.get("sub"))
     if not organizer_id:
         raise HTTPException(  
             status_code=401,
             detail="Invalid token payload"
         )
     
-    organizer = db.query(Organizer).filter(Organizer.id == int(organizer_id)).first()
+    result = await db.execute(
+        select(Organizer).where(Organizer.id == organizer_id)
+    )
+    organizer = result.scalar_one_or_none()
     if not organizer or not organizer.is_active:
         raise HTTPException(  
             status_code=401,
@@ -438,26 +441,28 @@ async def edit_event(
     remove_image: bool = Form(False),
     organizer = Depends(get_current_organizer)
 ):
+    logger.info(f"=== ENDPOINT REACHED ===")
+    logger.info(f"event_data: {event_data}")
     try:
         # Parse input
         event_datetime_naive = datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")
-        
+
         # Convert Tashkent → UTC (same as create endpoint)
         tashkent_tz = pytz.timezone('Asia/Tashkent')
         event_datetime_tashkent = tashkent_tz.localize(event_datetime_naive)
         event_datetime_utc = event_datetime_tashkent.astimezone(timezone.utc)
         utc_naive = event_datetime_utc.replace(tzinfo=None)
-        
+
         logger.info(f"Editing event {event_id}: {event_datetime_tashkent} → {utc_naive} UTC")
-        
+
         # Get event
         res = await db.execute(select(Event).filter(Event.id == event_id))
         event = res.scalar_one_or_none()
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
-        
+
         # datetime_changed = event.date_time != utc_naive
-        
+
         event.title = event_data.title
         event.desc = event_data.desc
         event.type = event_data.type 
@@ -466,7 +471,7 @@ async def edit_event(
         event.registration_question = event_data.registration_question
         event.requires_email = event_data.requires_email
         old_image_url = event.image_url
-        
+
         if remove_image and old_image_url:
             s3_service.delete_image(old_image_url)
             event.image_url = None
@@ -474,23 +479,25 @@ async def edit_event(
             if old_image_url:
                 s3_service.delete_image(old_image_url)
             event.image_url = await s3_service.upload_image(image)
-            
+
         await db.commit()
-        
+        await db.refresh(event)
+
         if event_data.reminder_hours_before or event_data.reminder_message is not None:
             reminder_config = {}
             if event_data.reminder_hours_before:
                 reminder_config['hours_before'] = event_data.reminder_hours_before
             if event_data.reminder_message is not None:
                 reminder_config['message'] = event_data.reminder_message
-            
+
             bg_task.add_task(schedule_reminder_bg, event_id, reminder_config)
-        
+
         return RedirectResponse(url=f"/events/{event_id}", status_code=status.HTTP_302_FOUND)
     
     except Exception as e:
-        logger.error(f"Update event error: {e}")
-        return RedirectResponse(url=f"/events/{event_id}/edit", status_code=status.HTTP_302_FOUND)
+        logger.error(f"Update event error: {e}", exc_info=True)
+        raise
+        # return RedirectResponse(url=f"/events/{event_id}/edit", status_code=status.HTTP_302_FOUND)
 
 @app.post("/events/{event_id}/delete")
 async def delete_event(

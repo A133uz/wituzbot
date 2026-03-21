@@ -204,7 +204,7 @@
                         <div class="alert {% if reminder.is_sent %}alert-success{% else %}alert-info{% endif %}">
                             <strong><i class="fas fa-info-circle me-2"></i>Current Reminder Status:</strong>
                             {% if reminder.is_sent %}
-                                ✅ Sent on {{ reminder.sent_at.strftime('%Y-%m-%d %H:%M UTC') }}
+                                ✅ Already sent
                             {% else %}
                                 ⏳ Scheduled ({{ reminder.hours_before }} hours before event)
                             {% endif %}

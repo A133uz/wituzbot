@@ -290,8 +290,8 @@ class EventUpdate(EventBase):
     registration_question: Optional[str] = None
     requires_email: bool = False
 
-    reminder_hours_before: Optional[int] = Field(..., ge=1, le=24)
-    reminder_message: Optional[str] = Field(..., max_length=4000)
+    reminder_hours_before: Optional[int] = Field(None, ge=1, le=24)
+    reminder_message: Optional[str] = Field(None, max_length=4000)
     
     @field_validator('date')
     @classmethod

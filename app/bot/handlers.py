@@ -347,15 +347,15 @@ async def register_user(cb: CallbackQuery, state: FSMContext):
 
     if getattr(event, "requires_email", False):
         pending_fields.append("email")
-        prompts["email"] = "Please enter your email address (or tap 'Skip')."
+        prompts["email"] = "Please enter your email address."
     if getattr(event, "registration_question", None):
         pending_fields.append("registration_question")
-        prompts["registration_question"] = f"📝 {event.registration_question}\n\nSend your answer, or tap 'Skip'."
+        prompts["registration_question"] = f"📝 {event.registration_question}\n\nSend your answer."
 
     if pending_fields:
         current_field = pending_fields.pop(0)
         prompt = prompts[current_field]
-        await cb.message.answer(prompt, reply_markup=await kb.create_skip_button())
+        await cb.message.answer(prompt)
         await state.set_state(EventRegistrationState.waiting_for_answer)
         await state.update_data(
             event_id=event_id,
@@ -412,7 +412,7 @@ async def handle_skip_question(cb: CallbackQuery, state: FSMContext):
 
     if pending_fields:
         next_field = pending_fields.pop(0)
-        await cb.message.answer(prompts[next_field], reply_markup=await kb.create_skip_button())
+        await cb.message.answer(prompts[next_field])
         await state.update_data(
             pending_fields=pending_fields,
             current_field=next_field,
@@ -450,7 +450,7 @@ async def handle_waiting_for_answer(msg: Message, state: FSMContext):
 
     if pending_fields:
         next_field = pending_fields.pop(0)
-        await msg.answer(prompts[next_field], reply_markup=await kb.create_skip_button())
+        await msg.answer(prompts[next_field])
         await state.update_data(
             pending_fields=pending_fields,
             current_field=next_field,
