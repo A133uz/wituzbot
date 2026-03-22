@@ -441,8 +441,6 @@ async def edit_event(
     remove_image: bool = Form(False),
     organizer = Depends(get_current_organizer)
 ):
-    logger.info(f"=== ENDPOINT REACHED ===")
-    logger.info(f"event_data: {event_data}")
     try:
         # Parse input
         event_datetime_naive = datetime.strptime(f"{event_data.date} {event_data.time}", "%Y-%m-%d %H:%M")

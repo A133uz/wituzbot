@@ -137,7 +137,7 @@ async def send_reminder_batch(event: Event, reminder: EventReminder, user_ids: L
         hours_before = reminder.hours_before
         message = f"🔔 <b>Event Reminder!</b>\n\n"
         message += f"📝 <b>{event.title}</b>\n"
-        message += f"📅 <b>Starting at </b> {event.date_time.strftime('%Y-%m-%d at %H:%M')}\n\n" 
+        message += f"📅 <b>Starting at </b> {event.local_datetime.strftime('%Y-%m-%d at %H:%M')}\n\n" 
         
         if reminder.message:
             message += reminder.message + "\n"
