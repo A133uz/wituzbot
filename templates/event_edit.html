@@ -76,15 +76,59 @@
                         </div>
                     </div>
                     
+                    <!-- Multilingual Description Tabs -->
                     <div class="mb-3">
-                        <label for="desc" class="form-label">
+                        <label class="form-label">
                             Description <span class="text-danger">*</span>
                         </label>
-                        <textarea class="form-control" id="desc" name="desc" rows="4" 
-                                  required minlength="10">{{ event.desc }}</textarea>
-                        <div class="invalid-feedback">
-                            Please enter a detailed description (minimum 10 characters).
+                        <ul class="nav nav-tabs mb-3" id="descTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="desc-en-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#desc-en-pane" type="button" role="tab" 
+                                        aria-controls="desc-en-pane" aria-selected="true">
+                                    <i class="fas fa-globe me-1"></i>English
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="desc-ru-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#desc-ru-pane" type="button" role="tab" 
+                                        aria-controls="desc-ru-pane" aria-selected="false">
+                                    <i class="fas fa-globe me-1"></i>Русский
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="desc-uz-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#desc-uz-pane" type="button" role="tab" 
+                                        aria-controls="desc-uz-pane" aria-selected="false">
+                                    <i class="fas fa-globe me-1"></i>Uzbek
+                                </button>
+                            </li>
+                        </ul>
+                        <div class="tab-content" id="descTabContent">
+                            <div class="tab-pane fade show active" id="desc-en-pane" role="tabpanel" 
+                                 aria-labelledby="desc-en-tab">
+                                <textarea class="form-control" id="desc_en" name="desc_en" rows="4" 
+                                          required minlength="10"
+                                          placeholder="Enter event description in English">{{ event_descs.en if event_descs else '' }}</textarea>
+                                <div class="invalid-feedback">
+                                    Please enter a detailed English description (minimum 10 characters).
+                                </div>
+                                <small class="text-muted">English description is required</small>
+                            </div>
+                            <div class="tab-pane fade" id="desc-ru-pane" role="tabpanel" 
+                                 aria-labelledby="desc-ru-tab">
+                                <textarea class="form-control" id="desc_ru" name="desc_ru" rows="4"
+                                          placeholder="Enter event description in Russian (optional)">{{ event_descs.ru if event_descs else '' }}</textarea>
+                                <small class="text-muted">Russian description is optional</small>
+                            </div>
+                            <div class="tab-pane fade" id="desc-uz-pane" role="tabpanel" 
+                                 aria-labelledby="desc-uz-tab">
+                                <textarea class="form-control" id="desc_uz" name="desc_uz" rows="4"
+                                          placeholder="Enter event description in Uzbek (optional)">{{ event_descs.uz if event_descs else '' }}</textarea>
+                                <small class="text-muted">Uzbek description is optional</small>
+                            </div>
                         </div>
+                        <div class="form-text">Provide detailed information about the event in at least English. Other languages are optional.</div>
                     </div>
 
                     <div class="mb-3">

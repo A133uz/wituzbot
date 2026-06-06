@@ -106,7 +106,9 @@ async def set_registration(event_id: int, tg_id: int, answer: Optional[str] = No
                 )
             )
             if existing.scalars().first():
-                return False, "You are already registered for this event!"
+                logger.debug(f"User {tg_id} already registered for event {event_id}")
+                return False, "registration_already_exists"
+            
             reg_schema = RegistrationCreate(
                 user_id=tg_id,
                 event_id=event_id,
@@ -117,17 +119,22 @@ async def set_registration(event_id: int, tg_id: int, answer: Optional[str] = No
             registration = Registration(**reg_schema.model_dump())
             session.add(registration)
             await session.commit()
-            return True, "Registration successful!"
+            
+            logger.debug(f"Registration created: user {tg_id} for event {event_id}")
+            return True, "registration_successful"
+            
         except IntegrityError as e:
             await session.rollback()
-            logger.error(f"Registration DB error: {e}")
-            return False, "Registration failed due to database constraint."
+            logger.warning(f"Registration constraint error for user {tg_id}, event {event_id}: {e}")
+            return False, "registration_error_constraint"
         except ValueError as e:
             await session.rollback()
-            return False, f"❌ Validation error: {str(e)}"
+            logger.warning(f"Registration validation error for user {tg_id}, event {event_id}: {e}")
+            return False, "registration_error_validation"
         except Exception as e:
             await session.rollback()
-            return False, f"An error occurred: {str(e)}"
+            logger.error(f"Registration unexpected error for user {tg_id}, event {event_id}: {e}")
+            return False, "registration_error_unknown"
     
 async def check_user_registration(tg_id: int, event_id: int) -> bool:
     try:
@@ -153,16 +160,16 @@ async def remove_registration(tg_id: int, event_id: int):
                 await session.delete(reg)
                 await session.flush()
                 await session.commit()
-                return True, "Successfully unregistered!"
+                return True, "unregistration_successful"
     except IntegrityError:
         await session.rollback()
-        return False, "Registration failed due to database constraint."
+        return False, "unregistration_error_constraint"
     except ValueError as e:
         await session.rollback()
-        return False, f"❌ Validation error: {str(e)}"
+        return False, "unregistration_error_validation"
     except Exception as e:
         await session.rollback()
-        return False, f"An error occurred: {str(e)}"
+        return False, "unregistration_error_unknown"
         
 
 

@@ -74,35 +74,28 @@ def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] 
         expire =  datetime.datetime.now(datetime.timezone.utc) + expires_delta
     else:
         expire = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS)
-        
-    logger.info(f"DEBUG: Token expiry time (UTC): {expire}")
-    logger.info(f"DEBUG: Current time (UTC): {datetime.datetime.now(datetime.timezone.utc)}")
-    logger.info(f"DEBUG: Token data: {to_encode}")
     
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    logger.debug(f"Access token created with expiry: {expire.isoformat()}")
     return encoded_jwt
 
 def verify_token(token: str) -> Optional[dict]:
     try:
-        logger.info(f"DEBUG: Verifying token (first 30 chars): {token[:30]}...")
-        logger.info(f"DEBUG: Using algorithm: {settings.ALGORITHM}")
-        
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        
-        logger.info(f"DEBUG: Token verified successfully! Payload: {payload}")
+        logger.debug(f"Token verified successfully for user: {payload.get('sub', 'unknown')}")
         return payload
         
     except jwt.ExpiredSignatureError:
-        logger.error("DEBUG: Token has EXPIRED")
+        logger.warning("Token verification failed: token has expired")
         return None
         
     except jwt.InvalidTokenError as e:
-        logger.error(f"DEBUG: Invalid token: {e}")
+        logger.warning(f"Token verification failed: invalid token ({e})")
         return None
         
     except Exception as e:
-        logger.error(f"DEBUG: Unexpected error verifying token: {e}")
+        logger.error(f"Token verification failed with unexpected error: {e}")
         return None
     
 def get_flash_messages(request: Request) -> list:

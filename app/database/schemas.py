@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 from .enums import EventTypeEnum
 import sys
@@ -10,6 +10,7 @@ app_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(app_dir))
 
 from utils.form_helpers import as_form
+from utils.description_helpers import serialize_description, deserialize_description
 import re
 
 #User Schemas
@@ -20,6 +21,7 @@ class UserBase(BaseModel):
     surname: str = Field(..., min_length=1, max_length=25, description="User's surname")
     organization: str = Field(..., min_length=1, max_length=100, description="User's organization/workplace")
     telegram_username: Optional[str] = Field(None, description="Telegram username")
+    language: str = Field(default="en", min_length=2, max_length=10, description="User's language preference (en, ru, uz)")
 
     @field_validator('name', 'surname', 'organization')
     @classmethod
@@ -39,6 +41,15 @@ class UserBase(BaseModel):
         v = v.strip()
         if not re.match(r'^[a-zA-Z\s\-\'\.]+$', v):
             raise ValueError('Name can only contain letters, spaces, hyphens, apostrophes, and periods')
+        return v
+    
+    @field_validator('language')
+    @classmethod
+    def validate_language(cls, v: str) -> str:
+        """Validate language is supported"""
+        v = v.lower().strip()
+        if v not in ('en', 'ru', 'uz'):
+            raise ValueError('Language must be one of: en, ru, uz')
         return v
     
 
@@ -63,6 +74,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=25)
     surname: Optional[str] = Field(None, min_length=1, max_length=25)
     organization: Optional[str] = Field(None, min_length=1, max_length=100)
+    language: Optional[str] = Field(None, min_length=2, max_length=10)
 
     @field_validator('name', 'surname', 'organization')
     @classmethod
@@ -75,12 +87,24 @@ class UserUpdate(BaseModel):
             return stripped
         return v
     
+    @field_validator('language')
+    @classmethod
+    def validate_language(cls, v: Optional[str]) -> Optional[str]:
+        """Validate language if provided"""
+        if v is not None:
+            v = v.lower().strip()
+            if v not in ('en', 'ru', 'uz'):
+                raise ValueError('Language must be one of: en, ru, uz')
+            return v
+        return v
+    
 
 
 class UserResponse(UserBase):
     """Schema for user response"""
     id: int
     telegram_id: int
+    language: str
 
     model_config = {"from_attributes": True}
 
@@ -234,18 +258,34 @@ class EventReminderResponse(EventReminderBase):
 class EventBase(BaseModel):
     """Base event schema with common fields"""
     title: str = Field(..., min_length=3, max_length=100, description="Event title")
-    desc: str = Field(..., min_length=10, description="Event description")
+    desc_en: str = Field(..., min_length=10, description="Event description in English")
+    desc_ru: str = Field(default="", description="Event description in Russian")
+    desc_uz: str = Field(default="", description="Event description in Uzbek")
     type: EventTypeEnum = Field(..., description="Event type/category")
     location: str = Field(..., min_length=3, max_length=100, description="Event location")
     
 
-    @field_validator('title', 'desc', 'location')
+    @field_validator('title', 'location')
     @classmethod
     def strip_and_validate(cls, v: str) -> str:
         """Strip whitespace and ensure not empty"""
         if not v or not v.strip():
             raise ValueError('This field cannot be empty')
         return v.strip()
+    
+    @field_validator('desc_ru', 'desc_uz', mode='before')
+    @classmethod
+    def strip_optional_desc(cls, v: Optional[str]) -> str:
+        """Strip whitespace from optional descriptions"""
+        if not v:
+            return ""
+        return v.strip()
+
+
+def _create_desc_payload(desc_en: str, desc_ru: str = "", desc_uz: str = "") -> str:
+    """Helper to serialize language-specific descriptions"""
+    import json
+    return json.dumps({"en": desc_en, "ru": desc_ru, "uz": desc_uz}, ensure_ascii=False)
 
 
 class EventCreate(EventBase):
@@ -255,8 +295,33 @@ class EventCreate(EventBase):
     registration_question: Optional[str] = Field(None, description="Optional registration question")
     requires_email: bool = Field(False, description="Optional email field")
     
+    @field_validator('desc_en')
+    @classmethod
+    def validate_desc_en(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('English description is required')
+        return v.strip()
+    
+    @field_validator('desc_ru', 'desc_uz')
+    @classmethod
+    def strip_other_descs(cls, v: str) -> str:
+        return v.strip() if v else ""
+    
     reminder_hours_before: int = Field(default=24, ge=1, le=24)
     reminder_message: Optional[str] = Field(..., max_length=4096)
+    
+    @model_validator(mode='before')
+    @classmethod
+    def serialize_description(cls, data):
+        """Convert language-specific description fields to JSON format"""
+        if isinstance(data, dict):
+            desc_en = data.get('desc_en', '')
+            desc_ru = data.get('desc_ru', '')
+            desc_uz = data.get('desc_uz', '')
+            if desc_en:
+                # Store the JSON in a temporary field for model processing
+                data['_desc_json'] = serialize_description(desc_en, desc_ru, desc_uz)
+        return data
 
     @field_validator('date')
     @classmethod
@@ -292,6 +357,30 @@ class EventUpdate(EventBase):
 
     reminder_hours_before: Optional[int] = Field(None, ge=1, le=24)
     reminder_message: Optional[str] = Field(None, max_length=4000)
+    
+    @field_validator('desc_en')
+    @classmethod
+    def validate_desc_en(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('English description is required')
+        return v.strip()
+    
+    @field_validator('desc_ru', 'desc_uz')
+    @classmethod
+    def strip_other_descs(cls, v: str) -> str:
+        return v.strip() if v else ""
+    
+    @model_validator(mode='before')
+    @classmethod
+    def serialize_description(cls, data):
+        """Convert language-specific description fields to JSON format"""
+        if isinstance(data, dict):
+            desc_en = data.get('desc_en', '')
+            desc_ru = data.get('desc_ru', '')
+            desc_uz = data.get('desc_uz', '')
+            if desc_en:
+                data['_desc_json'] = serialize_description(desc_en, desc_ru, desc_uz)
+        return data
     
     @field_validator('date')
     @classmethod

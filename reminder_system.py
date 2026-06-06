@@ -5,15 +5,23 @@ from datetime import datetime, timedelta, timezone
 import asyncio
 import logging
 from sqlalchemy.orm import Session
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
 
 from app.database.config import DatabaseSettings
 from app.bot.config import MainBotSettings
 from app.database.database import get_sync_session
 from app.database.models import Event, EventReminder, Registration
+from app.utils.logging_config import configure_logging, get_logger
+from app.utils.metrics import get_metrics, COUNTER_REMINDERS_SENT, COUNTER_REMINDERS_FAILED
 
 from typing import List
 
-logger = logging.getLogger(__name__)
+# Configure logging for celery worker
+configure_logging(service_name='celery-worker')
+logger = get_logger(__name__)
 
 settings = DatabaseSettings()
 bot_settings = MainBotSettings()
@@ -40,7 +48,7 @@ BATCH_SIZE = 50
 @celery_app.task(bind=True, max_retries=3)
 def send_reminder_task(self, reminder_id: int):
     """Send reminder for an event"""
-    logging.info(f"🔥 EXECUTING REMINDER TASK for event")
+    logger.info(f"🔔 Processing reminder task {reminder_id}")
     
     db = None
     try:
@@ -48,11 +56,11 @@ def send_reminder_task(self, reminder_id: int):
             reminder = db.query(EventReminder).filter(EventReminder.id == reminder_id).first()
             
             if not reminder:
-                logging.error(f"Reminder {reminder_id} not found")
+                logger.warning(f"Reminder {reminder_id} not found")
                 return f"Reminder {reminder_id} not found"
             
             if reminder.is_sent:
-                logging.info(f"Reminder {reminder_id} already sent")
+                logger.debug(f"Reminder {reminder_id} already sent")
                 return f"Reminder {reminder_id} already sent"
             
             event = reminder.event
@@ -63,7 +71,7 @@ def send_reminder_task(self, reminder_id: int):
             
             now_utc = datetime.now(timezone.utc)
             if event_dt <= now_utc:
-                logging.warning(f"Event {event.id} is in the past, skipping reminder")
+                logger.warning(f"Event {event.id} is in the past, skipping reminder")
                 return f"Event {event.id} is in the past"
             
             registrations = db.query(Registration).filter(
@@ -71,7 +79,7 @@ def send_reminder_task(self, reminder_id: int):
             ).all()
             
             if not registrations:
-                logging.info(f"No registrations for event {event.id}, skipping reminder")
+                logger.info(f"No registrations for event {event.id}, skipping reminder")
                 reminder.is_sent = True
                 db.commit()
                 return f"No registrations for event {event.id}"
@@ -91,19 +99,24 @@ def send_reminder_task(self, reminder_id: int):
                     total_sent += sent
                     total_failed += failed
                     
-                    logging.info(
+                    logger.debug(
                         f"Batch {i//BATCH_SIZE + 1}: "
                         f"sent {sent}, failed {failed}"
                     )
                     
                 except Exception as e:
-                    logging.error(f"Failed to send batch: {e}")
+                    logger.error(f"Failed to send batch: {e}")
                     total_failed += len(batch) 
                                       
             reminder.is_sent = True
             db.commit()
             
-            logging.info(
+            # Increment metrics
+            get_metrics().increment(COUNTER_REMINDERS_SENT, total_sent)
+            if total_failed > 0:
+                get_metrics().increment(COUNTER_REMINDERS_FAILED, total_failed)
+            
+            logger.info(
                 f"✅ Reminder {reminder_id} completed: "
                 f"sent {total_sent}, failed {total_failed}"
             )
@@ -111,7 +124,7 @@ def send_reminder_task(self, reminder_id: int):
             return f"Reminder sent: {total_sent} success, {total_failed} failed"
         
     except Exception as exc:
-        logging.error(f"❌ Reminder task failed for reminder {reminder_id}: {str(exc)}")
+        logger.error(f"❌ Reminder task failed for reminder {reminder_id}: {exc}", exc_info=True)
         if db:
             db.rollback()
         
@@ -124,36 +137,47 @@ def send_reminder_task(self, reminder_id: int):
 
 async def send_reminder_batch(event: Event, reminder: EventReminder, user_ids: List[int]) -> tuple:
     """
-    Send reminder to a batch of users
+    Send reminder to a batch of users, localized per user's language preference
     
     Returns:
         Tuple of (successful_count, failed_count)
     """
     from aiogram import Bot
+    from app.bot.localization import Language, get_description_for_language, t
+    from app.database.models import User
     
     try:
         bot = Bot(token=bot_settings.TG_TOKEN)
-        
-        hours_before = reminder.hours_before
-        message = f"🔔 <b>Event Reminder!</b>\n\n"
-        message += f"📝 <b>{event.title}</b>\n"
-        message += f"📅 <b>Starting at </b> {event.local_datetime.strftime('%Y-%m-%d at %H:%M')}\n\n" 
-        
-        if reminder.message:
-            message += reminder.message + "\n"
-        else:
-            message += f"📄 <b>Description:</b>\n{event.desc}\n\n"
-        
-        
-        if event.location:
-            message += f"📍 <b>Location:</b> {event.location}\n" 
-        
-        message += f"⏰ <i>This event starts in approximately {hours_before} {"hour" if hours_before == 1 else "hours" }!</i>"  
         
         sent_count = 0
         failed_count = 0
         for user_id in user_ids:
             try:
+                # Get user's language preference
+                with get_sync_session() as db:
+                    user = db.query(User).filter(User.telegram_id == user_id).first()
+                    user_lang = Language(user.language) if user and user.language else Language.EN
+                
+                hours_before = reminder.hours_before
+                
+                # Build fully localized reminder message
+                message = f"{t('reminder_header', user_lang)}\n\n"
+                message += f"{t('reminder_event_title', user_lang)} <b>{event.title}</b>\n"
+                message += f"{t('reminder_starting_at', user_lang)} {event.local_datetime.strftime('%Y-%m-%d at %H:%M')}\n\n" 
+                
+                if reminder.message:
+                    message += reminder.message + "\n"
+                else:
+                    # Get description in user's language
+                    event_desc = get_description_for_language(event.desc, user_lang)
+                    message += f"{t('reminder_description', user_lang)}\n{event_desc}\n\n"
+                
+                if event.location:
+                    message += f"{t('reminder_location', user_lang)} {event.location}\n" 
+                
+                hour_text = "hour" if hours_before == 1 else "hours"
+                message += t('reminder_countdown', user_lang, hours=hours_before, hours_text=hour_text)  
+                
                 await bot.send_message(
                     chat_id=user_id,
                     text=message,

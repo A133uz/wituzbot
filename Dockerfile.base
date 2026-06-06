@@ -2,10 +2,12 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
+# Install uv as the package manager
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir uv==0.11.19
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir --prefix=/install -r requirements.txt
+RUN uv pip install --compile-bytecode --no-cache-dir --prefix=/install -r requirements.txt
 
 
 FROM python:3.12-slim

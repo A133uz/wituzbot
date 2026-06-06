@@ -93,7 +93,50 @@
                 <hr>
                 
                 <h6>Description</h6>
-                <p class="text-muted">{{ event.desc }}</p>
+                {% if event_descs.en or event_descs.ru or event_descs.uz %}
+                <ul class="nav nav-tabs mb-3" role="tablist">
+                    {% if event_descs.en %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="desc-en-tab" data-bs-toggle="tab" data-bs-target="#desc-en" type="button" role="tab" aria-controls="desc-en" aria-selected="true">
+                            <i class="fas fa-flag-usa me-1"></i>English
+                        </button>
+                    </li>
+                    {% endif %}
+                    {% if event_descs.ru %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="desc-ru-tab" data-bs-toggle="tab" data-bs-target="#desc-ru" type="button" role="tab" aria-controls="desc-ru" aria-selected="false">
+                            <i class="fas fa-flag me-1"></i>Русский
+                        </button>
+                    </li>
+                    {% endif %}
+                    {% if event_descs.uz %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="desc-uz-tab" data-bs-toggle="tab" data-bs-target="#desc-uz" type="button" role="tab" aria-controls="desc-uz" aria-selected="false">
+                            <i class="fas fa-flag me-1"></i>Uzbek
+                        </button>
+                    </li>
+                    {% endif %}
+                </ul>
+                <div class="tab-content">
+                    {% if event_descs.en %}
+                    <div class="tab-pane fade show active" id="desc-en" role="tabpanel" aria-labelledby="desc-en-tab">
+                        <p class="text-muted">{{ event_descs.en }}</p>
+                    </div>
+                    {% endif %}
+                    {% if event_descs.ru %}
+                    <div class="tab-pane fade" id="desc-ru" role="tabpanel" aria-labelledby="desc-ru-tab">
+                        <p class="text-muted">{{ event_descs.ru }}</p>
+                    </div>
+                    {% endif %}
+                    {% if event_descs.uz %}
+                    <div class="tab-pane fade" id="desc-uz" role="tabpanel" aria-labelledby="desc-uz-tab">
+                        <p class="text-muted">{{ event_descs.uz }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-muted">No description available</p>
+                {% endif %}
             </div>
         </div>
     </div>

@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Depends, HTTPException, status, Response, UploadFile, File, Form, BackgroundTasks
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -25,6 +25,9 @@ from .config import AdminSettings
 from database.models import Organizer, Event, EventReminder, Registration, async_main
 from database.schemas import EventCreate, EventUpdate, OrganizerCreate, OrganizerUpdate, LoginRequest
 from .init_admin import create_initial_superuser
+from utils.description_helpers import serialize_description, deserialize_description
+from utils.logging_config import configure_logging, get_logger
+from utils.metrics import get_metrics, COUNTER_ADMIN_STARTS
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 
@@ -36,20 +39,21 @@ import logging
 import uvicorn
 
 
-
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configure centralized logging for admin service
+configure_logging(service_name='admin')
+logger = get_logger(__name__)
 settings = AdminSettings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 Application starting...")
+    logger.info("🚀 Admin panel starting...")
+    get_metrics().increment(COUNTER_ADMIN_STARTS)
+    
     await async_main()
     await create_initial_superuser()
-    logger.info("✅ Application ready")
+    logger.info("✅ Admin panel ready")
     yield
-    logger.info("👋 Application shutting down...")
+    logger.info("👋 Admin panel shutting down...")
 
 app = FastAPI(title="Event Admin Panel", lifespan=lifespan)
 
@@ -170,6 +174,23 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     referer = request.headers.get('referer', '/')
     return RedirectResponse(url=referer, status_code=302) 
     
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint with metrics snapshot."""
+    metrics = get_metrics().get_all()
+    return JSONResponse({
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "metrics": metrics,
+        "summary": {
+            "bot_starts": metrics.get("app:bot:starts:total", 0),
+            "registrations_success": metrics.get("app:registrations:success:total", 0),
+            "registrations_failed": metrics.get("app:registrations:failed:total", 0),
+            "reminders_sent": metrics.get("app:reminders:sent:total", 0),
+            "reminders_failed": metrics.get("app:reminders:failed:total", 0),
+        }
+    })
 
 @app.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -333,7 +354,7 @@ async def create_event(
 
         new_event = Event(
             title=event_data.title,
-            desc=event_data.desc,
+            desc=serialize_description(event_data.desc_en, event_data.desc_ru, event_data.desc_uz),
             type=event_data.type,
             date_time=utc_naive,
             location=event_data.location,
@@ -388,10 +409,14 @@ async def event_detail(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
+    # Deserialize description JSON for display
+    event_descs = deserialize_description(event.desc)
+    
     return templates.TemplateResponse("event_detail.html", {
         "request": request,
         "organizer": organizer,
         "event": event,
+        "event_descs": event_descs,
         "registrations": event.registrations,
         "form_data" : {}
     })
@@ -413,20 +438,14 @@ async def edit_event_form(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    # Mock data
-    # event = {
-    #     "id": event_id,
-    #     "title": "Tech Conference 2025",
-    #     "desc": "A comprehensive tech conference covering latest trends",
-    #     "date_time": datetime(2025, 8, 15, 10, 0),
-    #     "location": "Tech Center",
-    #     "type": "conference"
-    # }
+    # Deserialize the description JSON for display in the form
+    event_descs = deserialize_description(event.desc)
     
     return templates.TemplateResponse("event_edit.html", {
         "request": request,
         "organizer": organizer,
         "event": event,
+        "event_descs": event_descs,
         "form_data": {}
     })
 
@@ -462,7 +481,7 @@ async def edit_event(
         # datetime_changed = event.date_time != utc_naive
 
         event.title = event_data.title
-        event.desc = event_data.desc
+        event.desc = serialize_description(event_data.desc_en, event_data.desc_ru, event_data.desc_uz)
         event.type = event_data.type 
         event.date_time = utc_naive  
         event.location = event_data.location
