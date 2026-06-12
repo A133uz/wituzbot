@@ -355,7 +355,7 @@ async def register_user(cb: CallbackQuery, state: FSMContext):
     if pending_fields:
         current_field = pending_fields.pop(0)
         prompt = prompts[current_field]
-        await cb.message.answer(prompt)
+        await cb.message.answer(prompt, reply_markup=await kb.create_skip_button())
         await state.set_state(EventRegistrationState.waiting_for_answer)
         await state.update_data(
             event_id=event_id,
@@ -412,7 +412,7 @@ async def handle_skip_question(cb: CallbackQuery, state: FSMContext):
 
     if pending_fields:
         next_field = pending_fields.pop(0)
-        await cb.message.answer(prompts[next_field])
+        await cb.message.answer(prompts[next_field], reply_markup=await kb.create_skip_button())
         await state.update_data(
             pending_fields=pending_fields,
             current_field=next_field,
